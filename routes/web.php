@@ -1,0 +1,129 @@
+<?php
+
+use App\Http\Controllers\AreaController;
+use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\CompraController;
+use App\Http\Controllers\DevolucionController;
+use App\Http\Controllers\DotacionController;
+use App\Http\Controllers\ItemController;
+use App\Http\Controllers\ItemSearchController;
+use App\Http\Controllers\KitEmergenciaController;
+use App\Http\Controllers\MedidaController;
+use App\Http\Controllers\MovimientoController;
+use App\Http\Controllers\ProyectosController;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\PersonaController;
+use App\Http\Controllers\PrestamoController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\SucursalController;
+use App\Http\Controllers\UserRoleController;
+use Illuminate\Support\Facades\Auth;
+// web.php
+Route::get('/', fn() => view('welcome'));
+Auth::routes();
+
+Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
+
+Route::middleware(['auth'])->group(function () {
+
+    // PERMISOS
+    Route::get('/permissions', [PermissionController::class, 'index'])
+        ->name('permissions.index')->middleware('permission:permissions.view');
+    Route::get('/permissions/create', [PermissionController::class, 'create'])
+        ->name('permissions.create')->middleware('permission:permissions.create');
+    Route::post('/permissions', [PermissionController::class, 'store'])
+        ->name('permissions.store')->middleware('permission:permissions.create');
+    Route::get('/permissions/{permission}/edit', [PermissionController::class, 'edit'])
+        ->name('permissions.edit')->middleware('permission:permissions.update');
+    Route::put('/permissions/{permission}', [PermissionController::class, 'update'])
+        ->name('permissions.update')->middleware('permission:permissions.update');
+    Route::delete('/permissions/{permission}', [PermissionController::class, 'destroy'])
+        ->name('permissions.destroy')->middleware('permission:permissions.delete');
+
+    // ROLES
+    Route::get('/roles', [RoleController::class, 'index'])
+        ->name('roles.index')->middleware('permission:roles.view');
+    Route::get('/roles/create', [RoleController::class, 'create'])
+        ->name('roles.create')->middleware('permission:roles.create');
+    Route::post('/roles', [RoleController::class, 'store'])
+        ->name('roles.store')->middleware('permission:roles.create');
+    Route::get('/roles/{role}/edit', [RoleController::class, 'edit'])
+        ->name('roles.edit')->middleware('permission:roles.update');
+    Route::put('/roles/{role}', [RoleController::class, 'update'])
+        ->name('roles.update')->middleware('permission:roles.update');
+    Route::delete('/roles/{role}', [RoleController::class, 'destroy'])
+        ->name('roles.destroy')->middleware('permission:roles.delete');
+
+    // USUARIOS ↔ ROLES
+    Route::get('/users', [UserRoleController::class, 'index'])
+        ->name('users.index')->middleware('permission:users.view');
+    Route::get('/users/{user}/roles', [UserRoleController::class, 'edit'])
+        ->name('users.roles.edit')->middleware('permission:users.assign.roles');
+    Route::put('/users/{user}/roles', [UserRoleController::class, 'update'])
+        ->name('users.roles.update')->middleware('permission:users.assign.roles');
+
+    // PERSONAS
+    Route::get('personas', [PersonaController::class, 'index'])
+        ->name('personas.index')->middleware('permission:personas.view');
+    Route::get('personas/create', [PersonaController::class, 'create'])
+        ->name('personas.create')->middleware('permission:personas.create');
+    Route::post('personas', [PersonaController::class, 'store'])
+        ->name('personas.store')->middleware('permission:personas.create');
+    Route::get('personas/{persona}/edit', [PersonaController::class, 'edit'])
+        ->name('personas.edit')->middleware('permission:personas.update');
+    Route::put('personas/{persona}', [PersonaController::class, 'update'])
+        ->name('personas.update')->middleware('permission:personas.update');
+    Route::delete('personas/{persona}', [PersonaController::class, 'destroy'])
+        ->name('personas.destroy')->middleware('permission:personas.delete');
+    Route::get('personas/{persona}', [PersonaController::class, 'show'])
+        ->name('personas.show')->middleware('permission:personas.view');
+
+    // PROYECTOS / CATEGORÍAS / MEDIDAS / ITEMS (estos ya tienen permisos en sus controllers)
+    Route::resource('proyectos', ProyectosController::class)->names('proyectos');
+    Route::resource('areas', AreaController::class)->names('areas');
+    Route::resource('categorias', controller: CategoriaController::class)->names('categorias');
+    Route::resource('medidas',   MedidaController::class)->names('medidas');
+    Route::resource('items',     ItemController::class)->names('items');
+    Route::resource('sucursal', SucursalController::class)->names('sucursal');
+
+    // PRÉSTAMOS
+    Route::resource('prestamos', PrestamoController::class)->names('prestamos');
+
+    // DEVOLUCIONES (anidadas)
+    Route::get('prestamos/{prestamo}/devoluciones/create', [DevolucionController::class, 'create'])
+        ->name('devoluciones.create')
+        ->middleware('permission:devoluciones.create');
+    Route::post('prestamos/{prestamo}/devoluciones', [DevolucionController::class, 'store'])
+        ->name('devoluciones.store')
+        ->middleware('permission:devoluciones.create');
+
+    // DOTACIONES
+    Route::resource('dotaciones', DotacionController::class)->names('dotaciones');
+
+    Route::resource('kits', KitEmergenciaController::class)
+        ->names('kits');
+    Route::get('api/items/search', [ItemSearchController::class, 'search'])
+        ->name('items.search') // ?q=
+        ->middleware('permission:kits.create');
+    // INCIDENTES (desde préstamo)
+    Route::post('prestamos/{prestamo}/incidentes', [PrestamoController::class, 'storeIncidente'])
+        ->name('prestamos.incidentes.store')
+        ->middleware('permission:prestamos.incidentes.store');
+
+    Route::resource('compras', CompraController::class)->except(['show']);
+    Route::patch('compras/{compra}/resolver', [CompraController::class, 'resolver'])->name('compras.resolver');
+    // routes/web.php
+    Route::post('/prestamos/{prestamo}/devolucion-kit', [DevolucionController::class, 'devolverKitCompleto'])
+        ->name('devoluciones.kit');
+    // routes/web.php
+    Route::get('/movimientos', [MovimientoController::class, 'index'])
+        ->name('movimientos.index')
+        ->middleware('auth');
+    Route::post('/prestamos/{prestamo}/devolucion-kit', [DevolucionController::class, 'devolverKitCompleto'])
+        ->name('devoluciones.kit')
+        ->middleware('permission:devoluciones.kit');
+    // routes/web.php
+    Route::post('/compras/solicitar', [CompraController::class, 'solicitar'])
+        ->name('compras.solicitar');
+});
