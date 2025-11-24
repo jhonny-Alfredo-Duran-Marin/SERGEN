@@ -15,7 +15,7 @@
                     </label>
                     <input type="text" name="codigo" id="codigo"
                         class="form-control @error('codigo') is-invalid @enderror"
-                        value="{{ old('codigo', $item->codigo ?? '') }}" placeholder="Ej: ITM-001" required autofocus>
+                        value="{{ old('codigo', $codigoAutogenerado ?? ($item->codigo ?? '')) }}" required>
                     @error('codigo')
                         <span class="invalid-feedback">
                             <i class="fas fa-exclamation-triangle"></i> {{ $message }}
@@ -100,12 +100,12 @@
                         <i class="fas fa-sitemap"></i> Area
                         <span class="text-danger">*</span>
                     </label>
-                    <select name="area_id" id="area_id"
-                        class="form-control @error('area_id') is-invalid @enderror" required>
+                    <select name="area_id" id="area_id" class="form-control @error('area_id') is-invalid @enderror"
+                        required>
                         <option value="">— Seleccionar area —</option>
                         @foreach ($areas as $c)
                             <option value="{{ $c->id }}" @selected((int) old('area_id', $item->area_id ?? 0) === (int) $c->id)>
-                                {{ $c->descripcion }}
+                                {{ $c->descripcion . ' - (' . ($c->sucursal->descripcion ?? 'N/A') . ')' }}
                             </option>
                         @endforeach
                     </select>
@@ -160,6 +160,7 @@
 </div>
 
 <!-- Inventario y Costos -->
+<!-- Inventario y Costos -->
 <div class="card card-success card-outline">
     <div class="card-header">
         <h3 class="card-title">
@@ -168,6 +169,7 @@
     </div>
     <div class="card-body">
         <div class="row">
+
             <div class="col-md-3">
                 <div class="form-group">
                     <label for="cantidad">
@@ -177,14 +179,7 @@
                     <input type="number" name="cantidad" id="cantidad"
                         class="form-control @error('cantidad') is-invalid @enderror"
                         value="{{ old('cantidad', $item->cantidad ?? 0) }}" min="0" step="1" required>
-                    <small class="form-text text-muted">
-                        Cantidad disponible en inventario
-                    </small>
-                    @error('cantidad')
-                        <span class="invalid-feedback">
-                            <i class="fas fa-exclamation-triangle"></i> {{ $message }}
-                        </span>
-                    @enderror
+                    <small class="form-text text-muted">Cantidad disponible en inventario</small>
                 </div>
             </div>
 
@@ -196,14 +191,7 @@
                     <input type="number" name="piezas" id="piezas"
                         class="form-control @error('piezas') is-invalid @enderror"
                         value="{{ old('piezas', $item->piezas ?? 0) }}" min="0" step="1">
-                    <small class="form-text text-muted">
-                        Número de piezas por unidad
-                    </small>
-                    @error('piezas')
-                        <span class="invalid-feedback">
-                            <i class="fas fa-exclamation-triangle"></i> {{ $message }}
-                        </span>
-                    @enderror
+                    <small class="form-text text-muted">Número de piezas por unidad</small>
                 </div>
             </div>
 
@@ -222,11 +210,24 @@
                             value="{{ old('costo_unitario', $item->costo_unitario ?? '0.00') }}" step="0.01"
                             min="0" required>
                     </div>
-                    @error('costo_unitario')
-                        <span class="invalid-feedback d-block">
-                            <i class="fas fa-exclamation-triangle"></i> {{ $message }}
-                        </span>
-                    @enderror
+                </div>
+            </div>
+
+            <!-- DESCUENTO EN MONTO (Bs.) -->
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label for="descuento">
+                        <i class="fas fa-minus-circle"></i> Descuento (Bs.)
+                    </label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">$</span>
+                        </div>
+                        <input type="number" name="descuento" id="descuento"
+                            class="form-control @error('descuento') is-invalid @enderror"
+                            value="{{ old('descuento', $item->descuento ?? 0) }}" min="0" step="0.01">
+                    </div>
+                    <small class="form-text text-muted">Monto que se resta al total</small>
                 </div>
             </div>
 
@@ -242,11 +243,10 @@
                         <input type="text" id="valor_total" class="form-control bg-light" value="0.00"
                             readonly>
                     </div>
-                    <small class="form-text text-muted">
-                        Calculado automáticamente
-                    </small>
+                    <small class="form-text text-muted">Calculado automáticamente</small>
                 </div>
             </div>
+
         </div>
 
         <div id="stock-alert" class="alert alert-warning" style="display: none;">
@@ -255,6 +255,8 @@
         </div>
     </div>
 </div>
+
+
 
 <!-- Clasificación y Estado -->
 <div class="card card-warning card-outline">
@@ -413,18 +415,28 @@
 @push('js')
     <script>
         $(function() {
-            // Calcular valor total del inventario
+
             function calcularValorTotal() {
                 const cantidad = parseFloat($('#cantidad').val()) || 0;
                 const costo = parseFloat($('#costo_unitario').val()) || 0;
-                const total = cantidad * costo;
+                const descuento = parseFloat($('#descuento').val()) || 0;
+
+                let total = cantidad * costo;
+
+                // Descuento en monto (Bs.)
+                if (descuento > 0) {
+                    total = total - descuento;
+                }
+
+                if (total < 0) total = 0; // evitar negativos
+
                 $('#valor_total').val(total.toFixed(2));
             }
 
-            $('#cantidad, #costo_unitario').on('input', calcularValorTotal);
-            calcularValorTotal(); // Calcular al cargar
+            $('#cantidad, #costo_unitario, #descuento').on('input', calcularValorTotal);
+            calcularValorTotal();
 
-            // Alerta de stock bajo
+            // stock bajo
             $('#cantidad').on('input', function() {
                 const cantidad = parseInt($(this).val()) || 0;
                 if (cantidad <= 3 && cantidad >= 0) {
@@ -434,29 +446,6 @@
                 }
             }).trigger('input');
 
-            // Preview de imagen
-            $('#imagen').on('change', function(e) {
-                const file = e.target.files[0];
-                if (file) {
-                    // Actualizar label
-                    $(this).next('.custom-file-label').html(file.name);
-
-                    // Mostrar preview
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        $('#preview-image').attr('src', e.target.result);
-                        $('#preview-container').slideDown();
-                    };
-                    reader.readAsDataURL(file);
-                } else {
-                    $('#preview-container').slideUp();
-                }
-            });
-
-            // Si se marca "eliminar imagen", ocultar preview actual
-            $('#remove-imagen').on('change', function() {
-                $(this).closest('.col-md-6').find('img').css('opacity', this.checked ? 0.3 : 1);
-            });
         });
     </script>
 @endpush

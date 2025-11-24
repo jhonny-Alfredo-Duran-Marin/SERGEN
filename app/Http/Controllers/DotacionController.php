@@ -3,8 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Dotacion;
+use App\Models\DotacionItem;
+use App\Models\Incidente;
+use App\Models\IncidenteItem;
 use App\Models\Item;
 use App\Models\Persona;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -13,142 +17,352 @@ class DotacionController extends Controller
 {
     public function __construct()
     {
-        // Ajusta permisos si usas spatie/permission
-        $this->middleware(['permission:dotaciones.view'])->only(['index','show']);
-        $this->middleware(['permission:dotaciones.create'])->only(['create','store']);
-        $this->middleware(['permission:dotaciones.update'])->only(['edit','update']);
+        $this->middleware(['permission:dotaciones.view'])->only(['index', 'show']);
+        $this->middleware(['permission:dotaciones.create'])->only(['create', 'store']);
+        $this->middleware(['permission:dotaciones.update'])->only(['edit', 'update']);
         $this->middleware(['permission:dotaciones.delete'])->only(['destroy']);
     }
 
+    /* ======================================================
+     * INDEX
+     * ====================================================== */
     public function index(Request $request)
     {
         $q       = $request->string('q')->toString();
-        $itemId  = $request->integer('item_id');
         $persId  = $request->integer('persona_id');
         $f1      = $request->date('desde');
         $f2      = $request->date('hasta');
 
         $query = Dotacion::query()
-            ->with(['item:id,codigo,descripcion,imagen_thumb,imagen_path','persona:id,nombre'])
-            ->orderByDesc('fecha')->orderByDesc('id');
+            ->with(['persona'])
+            ->orderByDesc('fecha')
+            ->orderByDesc('id');
 
         if ($q !== '') {
-            $query->whereHas('item', function($qq) use ($q){
-                $qq->where('codigo','like',"%{$q}%")
-                   ->orWhere('descripcion','like',"%{$q}%");
-            })->orWhereHas('persona', function($qq) use ($q){
-                $qq->where('nombre','like',"%{$q}%");
+            $query->whereHas('persona', function ($qq) use ($q) {
+                $qq->where('nombre', 'like', "%{$q}%");
             });
         }
-        if ($itemId)  $query->where('item_id',$itemId);
-        if ($persId)  $query->where('persona_id',$persId);
-        if ($f1)      $query->whereDate('fecha','>=',$f1);
-        if ($f2)      $query->whereDate('fecha','<=',$f2);
+
+        if ($persId)  $query->where('persona_id', $persId);
+        if ($f1)      $query->whereDate('fecha', '>=', $f1);
+        if ($f2)      $query->whereDate('fecha', '<=', $f2);
+
+        // Calcular estadísticas ANTES de paginar
+        $total = (clone $query)->count();
+        $abiertas = (clone $query)->where('estado_final', 'ABIERTA')->count();
+        $devueltas = (clone $query)->where('estado_final', 'DEVUELTA')->count();
+        $completadas = (clone $query)->where('estado_final', 'COMPLETADA')->count();
 
         $dotaciones = $query->paginate(20)->withQueryString();
+        $personas   = Persona::orderBy('nombre')->get(['id', 'nombre']);
 
-        // métricas
-        $total = (clone $query)->count();
-        $totalUnidades = (clone $query)->sum('cantidad');
-
-        $items    = Item::orderBy('descripcion')->get(['id','codigo','descripcion']);
-        $personas = Persona::orderBy('nombre')->get(['id','nombre']);
-
-        return view('dotaciones.index', compact('dotaciones','items','personas','total','totalUnidades'));
+        return view('dotaciones.index', compact(
+            'dotaciones',
+            'personas',
+            'total',
+            'abiertas',
+            'devueltas',
+            'completadas'
+        ));
     }
-
+    /* ======================================================
+     * CREATE
+     * ====================================================== */
     public function create()
     {
-        $items    = Item::orderBy('descripcion')->get(['id','codigo','descripcion','cantidad']);
-        $personas = Persona::orderBy('nombre')->get(['id','nombre']);
-        return view('dotaciones.create', compact('items','personas'));
+        $items    = Item::orderBy('descripcion')->get(['id', 'codigo', 'descripcion', 'cantidad']);
+        $personas = Persona::orderBy('nombre')->get(['id', 'nombre']);
+
+        return view('dotaciones.create', compact('items', 'personas'));
     }
 
+    /* ======================================================
+     * STORE MULTI ITEMS
+     * ====================================================== */
     public function store(Request $request)
     {
         $data = $request->validate([
-            'item_id'    => ['required','exists:items,id'],
-            'persona_id' => ['required','exists:personas,id'],
-            'cantidad'   => ['required','integer','min:1'],
-            'fecha'      => ['required','date'],
+            'persona_id' => ['required', 'exists:personas,id'],
+            'fecha'      => ['required', 'date'],
+            'items'      => ['required', 'array', 'min:1'],
+            'items.*.item_id' => ['required', 'exists:items,id'],
+            'items.*.cantidad' => ['required', 'integer', 'min:1'],
         ]);
 
-        DB::transaction(function() use ($data) {
-            $item = Item::lockForUpdate()->findOrFail($data['item_id']);
+        DB::transaction(function () use ($data) {
 
-            if ($data['cantidad'] > $item->cantidad) {
-                abort(422, 'No hay stock suficiente del ítem seleccionado.');
+            $dotacion = Dotacion::create([
+                'persona_id'   => $data['persona_id'],
+                'fecha'        => $data['fecha'],
+                'estado_final' => 'ABIERTA'
+            ]);
+
+            foreach ($data['items'] as $row) {
+
+                $item = Item::lockForUpdate()->find($row['item_id']);
+
+                if ($row['cantidad'] > $item->cantidad) {
+                    abort(422, "No hay stock suficiente para {$item->descripcion}");
+                }
+
+                DotacionItem::create([
+                    'dotacion_id' => $dotacion->id,
+                    'item_id'     => $row['item_id'],
+                    'cantidad'    => $row['cantidad'],
+                    'estado_item' => 'EN_USO'
+                ]);
+
+                $item->decrement('cantidad', $row['cantidad']);
+                $item->update(['estado' => 'Dotado']);
             }
-
-            Dotacion::create($data);
-            $item->decrement('cantidad', $data['cantidad']);
         });
 
-        return redirect()->route('dotaciones.index')->with('status','Dotación registrada.');
+        return redirect()->route('dotaciones.index')
+            ->with('status', 'Dotación registrada correctamente.');
     }
 
-    public function show(Dotacion $dotacione) // por convención de resource en singular del nombre
+    /* ======================================================
+     * SHOW
+     * ====================================================== */
+    public function show(Dotacion $dotacion)
     {
-        $dotacione->load(['item','persona']);
-        return view('dotaciones.show', compact('dotacione'));
+        $dotacion->load(['persona', 'items.item']);
+        return view('dotaciones.show', compact('dotacion'));
     }
 
-    public function edit(Dotacion $dotacione)
+    /* ======================================================
+     * EDIT
+     * ====================================================== */
+    public function edit(Dotacion $dotacion)
     {
-        $items    = Item::orderBy('descripcion')->get(['id','codigo','descripcion','cantidad']);
-        $personas = Persona::orderBy('nombre')->get(['id','nombre']);
-        return view('dotaciones.edit', compact('dotacione','items','personas'));
+        $dotacion->load('items.item');
+
+        $items    = Item::orderBy('descripcion')->get(['id', 'codigo', 'descripcion', 'cantidad']);
+        $personas = Persona::orderBy('nombre')->get(['id', 'nombre']);
+
+        return view('dotaciones.edit', compact('dotacion', 'items', 'personas'));
     }
 
-    public function update(Request $request, Dotacion $dotacione)
+    /* ======================================================
+     * UPDATE MULTI ITEMS
+     * ====================================================== */
+    public function update(Request $request, Dotacion $dotacion)
     {
         $data = $request->validate([
-            'item_id'    => ['required','exists:items,id'],
-            'persona_id' => ['required','exists:personas,id'],
-            'cantidad'   => ['required','integer','min:1'],
-            'fecha'      => ['required','date'],
+            'persona_id' => ['required', 'exists:personas,id'],
+            'fecha'      => ['required', 'date'],
+            'items'      => ['required', 'array', 'min:1'],
+
+            'items.*.dotacion_item_id' => ['nullable', 'exists:dotacion_items,id'],
+            'items.*.item_id' => ['required', 'exists:items,id'],
+            'items.*.cantidad' => ['required', 'integer', 'min:1'],
         ]);
 
-        DB::transaction(function() use ($dotacione,$data) {
-            // Si cambia de item, revertimos stock anterior y descontamos del nuevo
-            if ($dotacione->item_id !== (int)$data['item_id']) {
-                $oldItem = Item::lockForUpdate()->findOrFail($dotacione->item_id);
-                $oldItem->increment('cantidad', $dotacione->cantidad);
+        DB::transaction(function () use ($data, $dotacion) {
 
-                $newItem = Item::lockForUpdate()->findOrFail($data['item_id']);
-                if ($data['cantidad'] > $newItem->cantidad) {
-                    abort(422, 'No hay stock suficiente del nuevo ítem.');
-                }
-                $newItem->decrement('cantidad', $data['cantidad']);
-            } else {
-                // mismo item: ajustamos diferencia
-                $item = Item::lockForUpdate()->findOrFail($dotacione->item_id);
-                $diff = (int)$data['cantidad'] - (int)$dotacione->cantidad;
-                if ($diff > 0) {
-                    // quieren más: verificar stock
-                    if ($diff > $item->cantidad) abort(422,'Stock insuficiente para incrementar la dotación.');
-                    $item->decrement('cantidad', $diff);
-                } elseif ($diff < 0) {
-                    // devolvemos la diferencia
-                    $item->increment('cantidad', abs($diff));
+            $dotacion->update([
+                'persona_id' => $data['persona_id'],
+                'fecha'      => $data['fecha'],
+            ]);
+
+            $ids_recibidos = [];
+
+            foreach ($data['items'] as $row) {
+
+                if (!empty($row['dotacion_item_id'])) {
+
+                    $dotItem = DotacionItem::lockForUpdate()->find($row['dotacion_item_id']);
+                    $item = Item::lockForUpdate()->find($row['item_id']);
+
+                    $item->increment('cantidad', $dotItem->cantidad);
+
+                    if ($row['cantidad'] > $item->cantidad) {
+                        abort(422, "No hay stock suficiente para {$item->descripcion}");
+                    }
+
+                    $dotItem->update([
+                        'item_id'  => $row['item_id'],
+                        'cantidad' => $row['cantidad'],
+                    ]);
+
+                    $item->decrement('cantidad', $row['cantidad']);
+                    $item->update(['estado' => 'Dotado']);
+
+                    $ids_recibidos[] = $dotItem->id;
+                } else {
+
+                    $item = Item::lockForUpdate()->find($row['item_id']);
+
+                    if ($row['cantidad'] > $item->cantidad) {
+                        abort(422, "Stock insuficiente para {$item->descripcion}");
+                    }
+
+                    $dotItem = DotacionItem::create([
+                        'dotacion_id' => $dotacion->id,
+                        'item_id'     => $row['item_id'],
+                        'cantidad'    => $row['cantidad'],
+                        'estado_item' => 'EN_USO'
+                    ]);
+
+                    $item->decrement('cantidad', $row['cantidad']);
+                    $item->update(['estado' => 'Dotado']);
+
+                    $ids_recibidos[] = $dotItem->id;
                 }
             }
 
-            $dotacione->update($data);
+            DotacionItem::where('dotacion_id', $dotacion->id)
+                ->whereNotIn('id', $ids_recibidos)
+                ->each(function ($di) {
+                    $di->item->increment('cantidad', $di->cantidad);
+                    $di->item->update(['estado' => 'Disponible']);
+                    $di->delete();
+                });
         });
 
-        return redirect()->route('dotaciones.index')->with('status','Dotación actualizada.');
+        return redirect()->route('dotaciones.show', $dotacion)
+            ->with('status', 'Dotación actualizada.');
     }
 
-    public function destroy(Dotacion $dotacione)
+    /* ======================================================
+     * FORM DEVOLVER
+     * ====================================================== */
+    public function formDevolver(Dotacion $dotacion)
     {
-        DB::transaction(function() use ($dotacione) {
-            // reponer stock
-            $item = Item::lockForUpdate()->findOrFail($dotacione->item_id);
-            $item->increment('cantidad', $dotacione->cantidad);
-            $dotacione->delete();
+        $dotacion->load(['items.item']);
+        return view('dotaciones.devolver', compact('dotacion'));
+    }
+
+    /* ======================================================
+     * PROCESAR DEVOLUCIÓN DEFINITIVO
+     * ====================================================== */
+    public function procesarDevolucion(Request $request, Dotacion $dotacion)
+    {
+        $data = $request->validate([
+            'items' => ['required', 'array'],
+            'items.*.dotacion_item_id' => ['required', 'exists:dotacion_items,id'],
+            'items.*.estado' => ['required', Rule::in(['OK', 'DANADO', 'PERDIDO', 'BAJA'])],
+            'items.*.observacion' => ['nullable', 'string'],
+        ]);
+
+        DB::transaction(function () use ($data, $dotacion) {
+
+            $items_incidente = [];
+            $huboProblemas   = false;
+
+            foreach ($data['items'] as $it) {
+
+                $dotItem = DotacionItem::lockForUpdate()->find($it['dotacion_item_id']);
+                $item    = $dotItem->item;
+                $estado  = $it['estado'];
+
+                $dotItem->update([
+                    'estado_item'     => $estado,
+                    'fecha_devolucion' => now(),
+                    'observacion'     => $it['observacion'] ?? null,
+                ]);
+
+                switch ($estado) {
+
+                    case 'OK':
+                        $item->increment('cantidad', $dotItem->cantidad);
+                        $item->update(['estado' => 'Disponible']);
+                        break;
+
+                    case 'DANADO':
+                        $huboProblemas = true;
+                        $item->update(['estado' => 'Observacion']);
+                        $items_incidente[] = [
+                            'item_id'     => $item->id,
+                            'dotacion_id' => $dotacion->id,
+                            'estado_item' => 'DANADO',
+                            'cantidad'    => $dotItem->cantidad,
+                            'observacion' => $it['observacion'] ?? null,
+                        ];
+                        break;
+
+                    case 'PERDIDO':
+                        $huboProblemas = true;
+                        $item->update(['estado' => 'Observacion']);
+                        $items_incidente[] = [
+                            'item_id'     => $item->id,
+                            'dotacion_id' => $dotacion->id,
+                            'estado_item' => 'PERDIDO',
+                            'cantidad'    => $dotItem->cantidad,
+                            'observacion' => $it['observacion'] ?? null,
+                        ];
+                        break;
+
+                    case 'BAJA':
+                        $huboProblemas = true;
+                        $item->update(['estado' => 'Baja']);
+                        $items_incidente[] = [
+                            'item_id'     => $item->id,
+                            'dotacion_id' => $dotacion->id,
+                            'estado_item' => 'BAJA',
+                            'cantidad'    => $dotItem->cantidad,
+                            'observacion' => $it['observacion'] ?? null,
+                        ];
+                        break;
+                }
+            }
+
+            if ($huboProblemas) {
+
+                $incidente = Incidente::create([
+                    'codigo'          => Incidente::generarCodigo(),
+                    'tipo'            => 'DOTACION',
+                    'estado'          => 'ACTIVO',
+                    'persona_id'      => $dotacion->persona_id,
+                    'fecha_incidente' => now(),
+                    'descripcion'     => 'Incidentes detectados en la devolución',
+                ]);
+
+                foreach ($items_incidente as $inc) {
+                    IncidenteItem::create(array_merge($inc, [
+                        'incident_id' => $incidente->id
+                    ]));
+                }
+
+                $dotacion->update(['estado_final' => 'COMPLETADA']);
+            } else {
+                $dotacion->update(['estado_final' => 'DEVUELTA']);
+            }
         });
 
-        return redirect()->route('dotaciones.index')->with('status','Dotación eliminada.');
+        return redirect()->route('dotaciones.show', $dotacion)
+            ->with('status', 'Devolución procesada correctamente.');
+    }
+
+    /* ======================================================
+     * DELETE
+     * ====================================================== */
+    public function destroy(Dotacion $dotacion)
+    {
+        DB::transaction(function () use ($dotacion) {
+
+            foreach ($dotacion->items as $di) {
+                $di->item->increment('cantidad', $di->cantidad);
+                $di->item->update(['estado' => 'Disponible']);
+            }
+
+            $dotacion->delete();
+        });
+
+        return redirect()->route('dotaciones.index')
+            ->with('status', 'Dotación eliminada.');
+    }
+
+
+    public function pdf(Dotacion $dotacion)
+    {
+        $dotacion->load(['persona', 'items.item']);
+
+        $pdf = Pdf::loadView('dotaciones.pdf', [
+            'dotacion' => $dotacion
+        ])->setPaper('A4', 'portrait');
+
+        return $pdf->stream('dotacion-' . $dotacion->id . '.pdf');
     }
 }

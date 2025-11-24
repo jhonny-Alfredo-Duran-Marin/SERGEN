@@ -7,8 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 class Movimiento extends Model
 {
     protected $fillable = [
-        'item_id', 'tipo', 'cantidad', 'fecha',
-        'user_id', 'prestamo_id', 'devolucion_id', 'nota'
+        'item_id',
+        'accion',
+        'tipo',
+        'cantidad',
+        'fecha',
+        'user_id',
+        'prestamo_id',
+        'devolucion_id',
+        'nota'
     ];
 
     protected $casts = ['fecha' => 'datetime'];
@@ -35,4 +42,3 @@ class Movimiento extends Model
         return $this->belongsTo(Devolucion::class);
     }
 }
- 

@@ -15,6 +15,7 @@ use Intervention\Image\Drivers\Gd\Driver;
 
 use App\Jobs\ProcessItemImages;
 use App\Models\Area;
+use App\Models\Movimiento;
 
 class ItemController extends Controller
 {
@@ -32,7 +33,7 @@ class ItemController extends Controller
         $categoriaId = $request->integer('categoria_id');
         $areaId      = $request->integer('area_id');
         $tipo        = $request->string('tipo')->toString();
-        $estado      = $request->string('estado')->toString(); 
+        $estado      = $request->string('estado')->toString();
 
         $query = Item::query()->with(['area:id,descripcion', 'categoria:id,descripcion', 'medida:id,simbolo']);
 
@@ -88,9 +89,25 @@ class ItemController extends Controller
     public function create()
     {
         $categorias = Categoria::orderBy('descripcion')->get(['id', 'descripcion']);
-        $medidas = Medida::orderBy('descripcion')->get(['id', 'descripcion', 'simbolo']);
-        $areas = Area::orderBy('descripcion')->get(['id', 'descripcion']);
-        return view('items.create', compact('categorias', 'medidas', 'areas'));
+        $medidas    = Medida::orderBy('descripcion')->get(['id', 'descripcion', 'simbolo']);
+        $areas      = Area::with('sucursal')->get();
+
+        // ------------------------
+        // GENERAR CÓDIGO AUTOMÁTICO
+        // ------------------------
+        $ultimo = Item::where('codigo', 'like', 'ITEM-%')
+            ->orderBy('id', 'desc')
+            ->value('codigo');
+
+        if ($ultimo) {
+            // extraer número final
+            $num = intval(str_replace('ITEM-', '', $ultimo)) + 1;
+            $codigoAutogenerado = 'ITEM-' . str_pad($num, 3, '0', STR_PAD_LEFT);
+        } else {
+            $codigoAutogenerado = 'ITEM-001';
+        }
+
+        return view('items.create', compact('categorias', 'medidas', 'areas', 'codigoAutogenerado'));
     }
 
     public function store(Request $request)
@@ -142,6 +159,7 @@ class ItemController extends Controller
         if (isset($tmpPath)) {
             ProcessItemImages::dispatch($item, $tmpPath);
         }
+        $item->registrarMovimiento("CREAR_ITEM", $item->cantidad, "Item creado");
 
         return redirect()->route('items.index')->with('status', 'Item creado.');
     }
@@ -156,7 +174,7 @@ class ItemController extends Controller
     {
         $categorias = Categoria::orderBy('descripcion')->get(['id', 'descripcion']);
         $medidas = Medida::orderBy('descripcion')->get(['id', 'descripcion', 'simbolo']);
-        $areas = Area::orderBy('descripcion')->get(['id', 'descripcion']);
+        $areas = Area::with('sucursal')->get();
         return view('items.edit', compact('item', 'categorias', 'medidas', 'areas'));
     }
 
@@ -224,19 +242,59 @@ class ItemController extends Controller
         if ($tmpPath) {
             ProcessItemImages::dispatch($item, $tmpPath);
         }
+        $item->registrarMovimiento("EDITAR_ITEM", null, "Item actualizado");
+        if ($item->wasChanged('cantidad')) {
+            $item->registrarMovimiento(
+                $item->cantidad > $item->getOriginal('cantidad') ? "AUMENTO_STOCK" : "DESCUENTO_STOCK",
+                abs($item->cantidad - $item->getOriginal('cantidad')),
+                "Cambio en cantidad"
+            );
+        }
+
+        if ($item->wasChanged('costo_unitario')) {
+            $item->registrarMovimiento("CAMBIO_COSTO", $item->cantidad, "Antes: {$item->getOriginal('costo_unitario')} — Después: {$item->costo_unitario}");
+        }
+
+        if ($item->wasChanged('estado')) {
+            $item->registrarMovimiento("CAMBIO_ESTADO", $item->cantidad, "Estado actualizado");
+        }
+
+        if ($item->wasChanged('ubicacion')) {
+            $item->registrarMovimiento("CAMBIO_UBICACION", $item->cantidad, "Nueva ubicación: {$item->ubicacion}");
+        }
 
         return redirect()->route('items.index')->with('status', 'Item actualizado.');
     }
 
     public function destroy(Item $item)
     {
+        // Guardamos datos ANTES de eliminar
+        $itemId = $item->id;
+        $codigo = $item->codigo;
+
+        // Eliminar imágenes
         if ($item->imagen_path) {
             Storage::disk('public')->delete($item->imagen_path);
         }
         if ($item->imagen_thumb) {
             Storage::disk('public')->delete($item->imagen_thumb);
         }
+
+        // Eliminar item
         $item->delete();
-        return redirect()->route('items.index')->with('status', 'Item eliminado.');
+
+        // Registrar movimiento manual SIN usar $item después del delete
+        Movimiento::create([
+            'item_id'  => $itemId,
+            'accion'   => "ELIMINAR_ITEM",
+            'cantidad' => null,
+            'fecha'    => now(),
+            'user_id'  => auth()->id(),
+            'nota'     => "Item $codigo eliminado del inventario"
+        ]);
+
+        return redirect()
+            ->route('items.index')
+            ->with('status', 'Item eliminado.');
     }
 }

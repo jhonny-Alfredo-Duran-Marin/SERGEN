@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
 class Item extends Model
 {
@@ -22,6 +23,7 @@ class Item extends Model
         'costo_unitario',
         'estado',
         'tipo',
+        'descuento',
         'ubicacion',
         'fecha_registro',
         'imagen_path',
@@ -85,19 +87,31 @@ class Item extends Model
         });
     }
 
+    public function getThumbUrlAttribute()
+    {
+        return $this->imagen_thumb
+            ? Storage::disk('public')->url($this->imagen_thumb)
+            : '/img/thumbplaceholder.png';
+    }
+
     public function getImagenUrlAttribute()
     {
-
-        if ($this->imagen_path) {
-            return Storage::disk('public')->url($this->imagen_path);
-        }
-        return '/img/placeholder.png';
+        return $this->imagen_path
+            ? Storage::disk('public')->url($this->imagen_path)
+            : ($this->imagen_thumb
+                ? Storage::disk('public')->url($this->imagen_thumb)
+                : '/img/placeholder.png');
     }
-    public function getThumbUrlAttribute(): string
+
+    public function registrarMovimiento($accion, $cantidad , $nota )
     {
-         if ($this->imagen_path) {
-            return Storage::disk('public')->url($this->imagen_thumb);
-        }
-        return '/img/thumbplaceholder.png';
+        Movimiento::create([
+            'item_id'   => $this->id,
+            'accion'    => $accion,
+            'cantidad'  => $cantidad,
+            'fecha'     => now(),
+            'user_id'   => auth()->id(),
+            'nota'      => $nota
+        ]);
     }
 }

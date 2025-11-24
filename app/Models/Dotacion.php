@@ -6,16 +6,22 @@ use Illuminate\Database\Eloquent\Model;
 
 class Dotacion extends Model
 {
-     protected $table = 'dotacions';
-    protected $fillable = ['item_id', 'persona_id', 'cantidad', 'fecha'];
-    protected $casts = ['fecha' => 'date'];
+    protected $fillable = [
+        'persona_id',
+        'fecha',
+        'nota',
+        'impreso',
+        'estado_final'
+    ];
 
-    public function item()
-    {
-        return $this->belongsTo(Item::class);
-    }
     public function persona()
     {
         return $this->belongsTo(Persona::class);
+    }
+
+    // UNA dotación → muchos items entregados
+    public function items()
+    {
+        return $this->hasMany(DotacionItem::class);
     }
 }

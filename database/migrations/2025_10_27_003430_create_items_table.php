@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignId('categoria_id')->constrained('categorias')->cascadeOnUpdate()->restrictOnDelete();
             $table->foreignId('medida_id')->constrained('medidas')->cascadeOnUpdate()->restrictOnDelete();
             $table->foreignId('area_id')->constrained('areas')->cascadeOnUpdate()->restrictOnDelete();
-            
+
             $table->string('codigo', 50)->unique();
             $table->string('descripcion', 255);
             $table->string('fabricante', 150)->nullable();
@@ -26,7 +26,8 @@ return new class extends Migration
             $table->unsignedInteger('piezas')->default(0);
 
             $table->decimal('costo_unitario', 12, 2)->default(0);
-            $table->enum('estado', ['Activo', 'Pasivo'])->default('Activo')->index();
+            $table->decimal('descuento', 12, 2)->default(0);
+            $table->enum('estado', ['Activo', 'Pasivo','Disponible','Prestado','Dotado','Observacion','Baja'])->default('Activo')->index();
             $table->enum('tipo', ['Herramienta', 'Material'])->default('Material')->index();
 
             $table->string('ubicacion', 250)->nullable();
@@ -36,7 +37,7 @@ return new class extends Migration
             $table->softDeletes();
             $table->timestamps();
 
-            $table->index(['categoria_id', 'medida_id','area_id']);
+            $table->index(['categoria_id', 'medida_id', 'area_id']);
         });
     }
 

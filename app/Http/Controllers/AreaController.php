@@ -24,7 +24,6 @@ class AreaController extends Controller
         $estado = $request->input('estado');
 
         $base = Area::query()
-             // Añadir with('sucursal') para evitar N+1
             ->with('sucursal')
             ->when($q, fn($qb) => $qb->where('descripcion', 'like', "%{$q}%"))
             ->when($estado, fn($qb) => $qb->where('estado', $estado));

@@ -23,7 +23,7 @@ class Compra extends Model
         'tipo_compra',
         'estado_procesamiento',
         'user_id',
-        // 'item_id' // Descomenta esto si agregas la columna item_id que te sugerí
+        'imagen',
     ];
 
     /**
@@ -45,12 +45,4 @@ class Compra extends Model
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * (Opcional) Si agregas la columna item_id
-     * Obtiene el item de inventario al que se asoció esta compra.
-     */
-    // public function item(): BelongsTo
-    // {
-    //     return $this->belongsTo(Item::class);
-    // }
 }

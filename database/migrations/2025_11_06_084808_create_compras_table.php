@@ -14,11 +14,12 @@ return new class extends Migration
         Schema::create('compras', function (Blueprint $table) {
             $table->id();
             $table->date('fecha_compra'); // Para el control por día
-            $table->string('descripcion'); // "2 martillos, Ferretería Don Pepito"
+            $table->string('descripcion');
+            $table->string('imagen');
             $table->decimal('costo_total', 10, 2);
             $table->integer('cantidad')->default(1);
-            $table->enum('tipo_compra',['Herramienta','Material','Insumos','Otros'])->default('Material');
-            $table->enum('estado_procesamiento',['Pendiente','Resuelto'])->default('Pendiente');
+            $table->enum('tipo_compra', ['Herramienta', 'Material', 'Insumos', 'Otros'])->default('Material');
+            $table->enum('estado_procesamiento', ['Pendiente', 'Resuelto'])->default('Pendiente');
             $table->foreignId('user_id')->constrained('users');
 
             $table->timestamps();

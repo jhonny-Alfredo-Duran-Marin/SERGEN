@@ -398,6 +398,7 @@ class SuperDemoSeeder extends Seeder
 
                     Movimiento::create([
                         'item_id'     => $it->id,
+                        'accion'     => "lo qeu sea",
                         'tipo'        => 'Egreso',
                         'cantidad'    => $cant,
                         'fecha'       => now()->subDays(fake()->numberBetween(1, 20)),

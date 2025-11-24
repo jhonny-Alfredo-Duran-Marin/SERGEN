@@ -11,7 +11,8 @@
 
 @section('content')
     <x-adminlte-card title="Actualizar Detalles" theme="warning" icon="fas fa-edit">
-        <form action="{{ route('compras.update', $compra) }}" method="POST">
+        <form action="{{ route('compras.update', $compra) }}" method="POST" enctype="multipart/form-data">
+
             @method('PUT')
             @include('compras._form', ['compra' => $compra])
         </form>

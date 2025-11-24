@@ -13,10 +13,17 @@ return new class extends Migration
     {
         Schema::create('dotacions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('item_id')->constrained('items')->cascadeOnDelete();
             $table->foreignId('persona_id')->constrained('personas')->cascadeOnDelete();
-            $table->integer('cantidad');
             $table->date('fecha');
+            $table->text('nota')->nullable();
+            $table->boolean('impreso')->default(false);
+            $table->enum('estado_final', [
+                'ABIERTA',
+                'DEVUELTA',
+                'COMPLETADA',
+                'BAJA'
+            ])->default('ABIERTA');
+
             $table->timestamps();
         });
     }

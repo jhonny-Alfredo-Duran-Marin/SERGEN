@@ -1,30 +1,59 @@
-
 @extends('adminlte::page')
-@section('title','Detalle de Dotación')
+@section('title', 'Detalle de Dotación')
 
 @section('content_header')
-  <div class="d-flex justify-content-between align-items-center">
-    <h1 class="m-0"><i class="fas fa-eye"></i> Detalle de Dotación</h1>
-    <div class="btn-group">
-      <a href="{{ route('dotaciones.edit',$dotacione) }}" class="btn btn-warning"><i class="fas fa-edit"></i> Editar</a>
-      <a href="{{ route('dotaciones.index') }}" class="btn btn-secondary"><i class="fas fa-list"></i> Volver</a>
+    <div class="d-flex justify-content-between align-items-center">
+        <h1><i class="fas fa-eye"></i> Detalle de Dotación</h1>
+
+        <div>
+            <a href="{{ route('dotaciones.devolver.form', $dotacion) }}">
+
+                <i class="fas fa-undo"></i> Devolver
+            </a>
+
+            <a href="{{ route('dotaciones.index') }}" class="btn btn-secondary">
+                Volver
+            </a>
+            <a href="{{ route('dotaciones.pdf', $dotacion) }}" class="btn btn-danger" target="_blank">
+                <i class="fas fa-file-pdf"></i> Imprimir PDF
+            </a>
+
+        </div>
     </div>
-  </div>
 @stop
 
 @section('content')
-<div class="card card-outline card-primary">
-  <div class="card-header"><h3 class="card-title"><i class="fas fa-info-circle"></i> Información</h3></div>
-  <div class="card-body">
-    <dl class="row mb-0">
-      <dt class="col-sm-3">Fecha</dt>   <dd class="col-sm-9">{{ optional($dotacione->fecha)->format('Y-m-d') }}</dd>
-      <dt class="col-sm-3">Persona</dt> <dd class="col-sm-9">{{ $dotacione->persona?->nombre }}</dd>
-      <dt class="col-sm-3">Ítem</dt>
-      <dd class="col-sm-9">
-        <strong>{{ $dotacione->item?->codigo }}</strong> — {{ $dotacione->item?->descripcion }}
-      </dd>
-      <dt class="col-sm-3">Cantidad</dt><dd class="col-sm-9"><span class="badge badge-info">{{ $dotacione->cantidad }}</span></dd>
-    </dl>
-  </div>
-</div>
+
+    <div class="card card-outline card-primary">
+        <div class="card-body">
+
+            <strong>Persona:</strong> {{ $dotacion->persona->nombre }}<br>
+            <strong>Fecha:</strong> {{ $dotacion->fecha }}<br>
+            <strong>Estado:</strong> <span class="badge badge-info">{{ $dotacion->estado_final }}</span>
+
+            <hr>
+
+            <h4>Ítems asignados</h4>
+
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Ítem</th>
+                        <th>Cantidad</th>
+                        <th>Estado Final</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($dotacion->items as $it)
+                        <tr>
+                            <td>{{ $it->item->codigo }} — {{ $it->item->descripcion }}</td>
+                            <td>{{ $it->cantidad }}</td>
+                            <td>{{ $it->estado_final ?? 'PENDIENTE' }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+
+        </div>
+    </div>
 @stop

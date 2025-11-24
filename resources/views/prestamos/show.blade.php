@@ -1,174 +1,160 @@
 @extends('adminlte::page')
-@section('title', 'Préstamo ' . $prestamo->codigo)
+
+@section('title', "Préstamo $prestamo->codigo")
 
 @section('content_header')
-    <div class="d-flex justify-content-between align-items-center">
-        <h1 class="m-0">
-            <i class="fas fa-file-alt"></i> Préstamo {{ $prestamo->codigo }}
-            <span
-                class="badge badge-{{ $prestamo->estado === 'Completo' ? 'success' : ($prestamo->estado === 'Observado' ? 'warning' : 'primary') }}">
-                {{ $prestamo->estado }}
-            </span>
-        </h1>
-        <div class="btn-group">
-            <a href="{{ route('prestamos.edit', $prestamo) }}" class="btn btn-warning"><i class="fas fa-edit"></i> Editar</a>
-            <a href="{{ route('prestamos.index') }}" class="btn btn-secondary"><i class="fas fa-list"></i> Volver</a>
-        </div>
+    <h1>
+        <i class="fas fa-file-contract"></i>
+        Préstamo {{ $prestamo->codigo }}
+
+        <span class="badge badge-{{ $prestamo->estado == 'Activo' ? 'primary' : ($prestamo->estado == 'Observado' ? 'warning' : 'success') }}">
+            {{ $prestamo->estado }}
+        </span>
+    </h1>
+
+    <div class="float-right">
+        <a href="{{ route('prestamos.edit', $prestamo) }}" class="btn btn-warning">
+            <i class="fas fa-edit"></i> Editar
+        </a>
+
+        <a href="{{ route('prestamos.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Volver
+        </a>
     </div>
 @stop
 
+
 @section('content')
-    @if (session('status'))
-        <x-adminlte-alert theme="success" title="OK">{{ session('status') }}</x-adminlte-alert>
-    @endif
 
-    <div class="card card-outline card-primary">
+{{-- =======================================================
+      INFORMACIÓN PRINCIPAL
+======================================================= --}}
+<div class="card card-primary card-outline">
+    <div class="card-body">
+        <div class="row">
+
+            <div class="col-md-4">
+                <strong>Fecha:</strong><br>
+                {{ $prestamo->fecha->format('Y-m-d') }}
+            </div>
+
+            <div class="col-md-4">
+                <strong>Persona:</strong><br>
+                {{ $prestamo->persona->nombre }}
+            </div>
+
+            <div class="col-md-4">
+                <strong>Nota:</strong><br>
+                {{ $prestamo->nota ?: '—' }}
+            </div>
+
+        </div>
+    </div>
+</div>
+
+
+{{-- =======================================================
+      BOTONES DE ACCIÓN
+======================================================= --}}
+<div class="mb-3">
+
+    <a href="{{ route('devoluciones.create', $prestamo) }}"
+       class="btn btn-primary">
+        <i class="fas fa-undo"></i> Registrar devolución
+    </a>
+
+
+ 
+</div>
+
+
+
+{{-- =======================================================
+      KIT ENTREGADO
+======================================================= --}}
+@if ($prestamo->kit_emergencia_id)
+    <div class="card card-success card-outline">
+        <div class="card-header">
+            <h5 class="card-title">
+                <i class="fas fa-toolbox"></i>
+                Kit entregado:
+                {{ $prestamo->kit->codigo }} — {{ $prestamo->kit->nombre }}
+            </h5>
+        </div>
+
         <div class="card-body">
-            <dl class="row mb-0">
-                <dt class="col-sm-3">Fecha</dt>
-                <dd class="col-sm-9">{{ optional($prestamo->fecha)->format('Y-m-d') }}</dd>
-                <dt class="col-sm-3">Destino</dt>
-                <dd class="col-sm-9">
-                    @if ($prestamo->tipo_destino === 'Persona')
-                        Persona: {{ $prestamo->persona?->nombre ?? '—' }}
-                    @elseif($prestamo->tipo_destino === 'Proyecto')
-                        Proyecto: {{ $prestamo->proyecto?->codigo }} — {{ $prestamo->proyecto?->descripcion }}
-                    @else
-                        Otro
-                    @endif
-                </dd>
-                <dt class="col-sm-3">Nota</dt>
-                <dd class="col-sm-9">{{ $prestamo->nota ?? '—' }}</dd>
-            </dl>
-        </div>
-    </div>
 
-    <div class="card card-outline card-info">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h3 class="card-title mb-0"><i class="fas fa-list"></i> Detalle</h3>
+            <h6><strong>Ítems incluidos en el kit:</strong></h6>
 
-            {{-- Acciones sobre detalle --}}
-            <div class="btn-group">
-                @if ($prestamo->estado !== 'Completo')
-                    <a href="{{ route('devoluciones.create', $prestamo) }}" class="btn btn-primary">
-                        <i class="fas fa-undo"></i> Registrar devolución
-                    </a>
-                    <button class="btn btn-outline-danger" data-toggle="modal" data-target="#modal-incidente">
-                        <i class="fas fa-exclamation-triangle"></i> Reporte de incidente
-                    </button>
-                @endif
-            </div>
-        </div>
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr class="bg-light">
+                        <th>Código</th>
+                        <th>Descripción</th>
+                        <th>Costo Unitario</th>
+                        <th>Cantidad</th>
+                    </tr>
+                </thead>
 
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-striped align-middle mb-0">
-                    <thead>
+                <tbody>
+                    @foreach ($prestamo->kit->items as $i)
                         <tr>
-                            <th>Ítem</th>
-                            <th class="text-end">Prestado</th>
-                            <th class="text-end">Devuelto</th>
-                            <th class="text-end">Pendiente</th>
+                            <td>{{ $i->codigo }}</td>
+                            <td>{{ $i->descripcion }}</td>
+                            <td>Bs {{ number_format($i->costo_unitario, 2) }}</td>
+                            <td>{{ $i->pivot->cantidad }}</td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($prestamo->detalles as $d)
-                            @php $pend = max(0, $d->cantidad_prestada - $d->cantidad_devuelta); @endphp
-                            <tr>
-                                <td>{{ $d->item->descripcion }}</td>
-                                <td class="text-end">{{ $d->cantidad_prestada }}</td>
-                                <td class="text-end">{{ $d->cantidad_devuelta }}</td>
-                                <td class="text-end">
-                                    <span class="badge badge-{{ $pend > 0 ? 'warning' : 'success' }}">{{ $pend }}</span>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
+                    @endforeach
+                </tbody>
+            </table>
         </div>
     </div>
+@endif
 
-    {{-- Devoluciones --}}
-    @if ($prestamo->devoluciones->count())
-        <div class="card card-outline card-secondary">
-            <div class="card-header">
-                <h3 class="card-title mb-0"><i class="fas fa-undo-alt"></i> Devoluciones</h3>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered mb-0">
-                        <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Estado</th>
-                                <th>Nota</th>
-                                <th>Detalle</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($prestamo->devoluciones as $dev)
-                                <tr>
-                                    <td>{{ $dev->fecha->format('Y-m-d H:i') }}</td>
-                                    <td>{{ $dev->estado }}</td>
-                                    <td>{{ $dev->nota ?? '—' }}</td>
-                                    <td>
-                                        @foreach ($dev->detalles as $dd)
-                                            <div>{{ $dd->item->descripcion }}: {{ $dd->cantidad }}</div>
-                                        @endforeach
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    @endif
 
-    {{-- MODAL: Reporte de incidente --}}
-    <div class="modal fade" id="modal-incidente" tabindex="-1">
-        <div class="modal-dialog">
-            <form method="POST" action="{{ route('prestamos.incidentes.store', $prestamo) }}" class="modal-content">
-                @csrf
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> Reporte de incidente</h5>
-                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label>Ítem (opcional)</label>
-                        <select name="detalle_prestamo_id" class="form-control">
-                            <option value="">— General —</option>
-                            @foreach ($prestamo->detalles as $d)
-                                <option value="{{ $d->id }}">{{ $d->item->descripcion }} — Pend:
-                                    {{ max(0, $d->cantidad_prestada - $d->cantidad_devuelta) }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Tipo</label>
-                        <select name="tipo" class="form-control" required>
-                            <option value="Falta">Falta</option>
-                            <option value="Daño">Daño</option>
-                            <option value="Pérdida">Pérdida</option>
-                            <option value="Otro">Otro</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Descripción / nota</label>
-                        <textarea name="nota" class="form-control" rows="3" placeholder="Describe brevemente lo ocurrido…"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-danger"><i class="fas fa-paper-plane"></i> Reportar</button>
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-                    <a href="#" class="btn btn-danger" data-toggle="modal" data-target="#modal-incidente">
-                        <i class="fas fa-exclamation-triangle"></i> Reportar incidente
-                    </a>
-
-                </div>
-            </form>
-        </div>
+{{-- =======================================================
+      ÍTEMS SUELTOS PRESTADOS
+======================================================= --}}
+<div class="card card-info card-outline mt-4">
+    <div class="card-header">
+        <h5 class="card-title">
+            <i class="fas fa-list"></i> Ítems sueltos prestados
+        </h5>
     </div>
+
+    <div class="card-body">
+
+        @if ($prestamo->detalles->count() == 0)
+            <p class="text-muted">No se prestaron ítems sueltos.</p>
+        @else
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr class="bg-light">
+                        <th>Código</th>
+                        <th>Descripción</th>
+                        <th>C.U.</th>
+                        <th>Prestado</th>
+                        <th>Devuelto</th>
+                        <th>Pendiente</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach ($prestamo->detalles as $d)
+                        <tr>
+                            <td>{{ $d->item->codigo }}</td>
+                            <td>{{ $d->item->descripcion }}</td>
+                            <td>Bs {{ number_format($d->item->costo_unitario, 2) }}</td>
+                            <td>{{ $d->cantidad_prestada }}</td>
+                            <td>{{ $d->cantidad_devuelta }}</td>
+                            <td>{{ $d->cantidad_prestada - $d->cantidad_devuelta }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @endif
+
+    </div>
+</div>
+
 @stop

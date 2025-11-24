@@ -11,7 +11,8 @@
 
 @section('content')
     <x-adminlte-card title="Detalles de la Compra" theme="success" icon="fas fa-shopping-cart">
-        <form action="{{ route('compras.store') }}" method="POST">
+        <form action="{{ route('compras.store') }}" method="POST" enctype="multipart/form-data">
+
             @include('compras._form')
         </form>
     </x-adminlte-card>
