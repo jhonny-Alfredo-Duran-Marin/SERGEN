@@ -52,10 +52,7 @@ class Item extends Model
     {
         return $this->hasMany(Dotacion::class);
     }
-    public function incidentes()
-    {
-        return $this->hasMany(PrestamoIncidente::class);
-    }
+
     // Helpers útiles
     public function getValorInventarioAttribute()
     {
@@ -103,15 +100,17 @@ class Item extends Model
                 : '/img/placeholder.png');
     }
 
-    public function registrarMovimiento($accion, $cantidad , $nota )
+    public function registrarMovimiento($tipo, $accion, $cantidad, $nota)
     {
         Movimiento::create([
             'item_id'   => $this->id,
+            'tipo'      => $tipo,
             'accion'    => $accion,
             'cantidad'  => $cantidad,
             'fecha'     => now(),
             'user_id'   => auth()->id(),
             'nota'      => $nota
         ]);
+
     }
 }

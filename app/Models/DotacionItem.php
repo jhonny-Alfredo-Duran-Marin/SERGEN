@@ -10,9 +10,18 @@ class DotacionItem extends Model
         'dotacion_id',
         'item_id',
         'cantidad',
-        'estado_final',        // BUENO • BAJA • OBSERVADO • NO_DEVUELTO
+        'estado_item',
         'fecha_devolucion',
-        'nota_estado',
+        'fecha_entrega',
+        'fecha_siguiente',
+        'observacion',
+
+    ];
+    // app/Models/Dotacion.php
+
+    protected $casts = [
+        'fecha_entrega' => 'date',
+        'fecha_siguiente' => 'date',
     ];
 
     public function dotacion()

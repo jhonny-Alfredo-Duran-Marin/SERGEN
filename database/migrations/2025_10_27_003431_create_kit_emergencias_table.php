@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('codigo', 50)->nullable();
             $table->string('nombre', 150);
             $table->string('descripcion', 255)->nullable();
-            $table->enum('estado', ['Activo', 'Pasivo'])->default('Activo')->index();
+            $table->enum('estado', ['Activo', 'Pasivo', 'Observado'])->default('Activo')->index();
             $table->timestamp('fecha_registro')->useCurrent();
             $table->timestamps();
             $table->softDeletes();

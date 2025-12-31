@@ -6,16 +6,18 @@ use Illuminate\Database\Eloquent\Model;
 
 class IncidenteItem extends Model
 {
+    protected $table = 'incidente_items';
+
     protected $fillable = [
         'incidente_id',
         'item_id',
-        'prestamo_id',
-        'dotacion_id',
         'estado_item',
         'cantidad',
-        'observacion'
     ];
 
+    /* =========================
+       RELACIONES
+    ========================= */
 
     public function incidente()
     {

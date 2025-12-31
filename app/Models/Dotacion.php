@@ -13,6 +13,11 @@ class Dotacion extends Model
         'impreso',
         'estado_final'
     ];
+    // app/Models/Dotacion.php
+
+    protected $casts = [
+        'fecha' => 'date', // O 'datetime' si incluye hora
+    ];
 
     public function persona()
     {

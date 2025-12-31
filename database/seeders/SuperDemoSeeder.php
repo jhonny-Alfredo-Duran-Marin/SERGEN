@@ -45,7 +45,7 @@ class SuperDemoSeeder extends Seeder
         $this->seedItems();
 
         // 7) Préstamos + movimientos + devoluciones robustas
-        $this->seedPrestamosConMovimientos();
+       // $this->seedPrestamosConMovimientos();
 
         $this->command->info('> SuperDemoSeeder listo ✅');
     }
@@ -292,7 +292,7 @@ class SuperDemoSeeder extends Seeder
                     'cantidad'           => fake()->numberBetween(4, 12),
                     'piezas'             => 0,
                     'costo_unitario'     => fake()->randomFloat(2, 50, 400),
-                    'estado'             => 'Activo',
+                    'estado'             => 'Disponible',
                     'tipo'               => 'Herramienta',
                     'ubicacion'          => 'Almacén A',
                     'fecha_registro'     => now(),
@@ -324,7 +324,7 @@ class SuperDemoSeeder extends Seeder
                     'cantidad'           => fake()->numberBetween(30, 250),
                     'piezas'             => 0,
                     'costo_unitario'     => fake()->randomFloat(2, 1, 50),
-                    'estado'             => 'Activo',
+                    'estado'             => 'Disponible',
                     'tipo'               => 'Material',
                     'ubicacion'          => 'Almacén B',
                     'fecha_registro'     => now(),

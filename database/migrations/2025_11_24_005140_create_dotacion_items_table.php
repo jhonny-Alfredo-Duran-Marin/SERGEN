@@ -15,18 +15,16 @@ return new class extends Migration
             $table->id();
             $table->foreignId('dotacion_id')->constrained('dotacions')->cascadeOnDelete();
             $table->foreignId('item_id')->constrained('items')->cascadeOnDelete();
-
+            $table->date('fecha_entrega');
             $table->integer('cantidad');
 
             $table->enum('estado_item', [
-                'EN_USO',        // entregado
-                'OK',            // devuelto ok
-                'BAJA',          // final de vida útil
-                'DANADO',        // devuelto con daño
-                'PERDIDO',       // no entregado
-            ])->default('EN_USO');
+                'USO_PROPIO',
+                'DE_VENTA',
+                'COMPRADO',
+            ])->default('USO_PROPIO');
 
-            $table->date('fecha_devolucion')->nullable();
+            $table->date('fecha_siguiente')->nullable();
             $table->text('observacion')->nullable();
 
             $table->timestamps();

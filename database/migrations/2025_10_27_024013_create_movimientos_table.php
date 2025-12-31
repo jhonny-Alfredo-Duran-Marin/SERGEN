@@ -13,10 +13,10 @@ return new class extends Migration
     {
         Schema::create('movimientos', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('item_id')->constrained('items')->nullable()->cascadeOnDelete();
-             $table->string('accion', 255);
-            $table->enum('tipo', ['Ingreso', 'Egreso']); // prestamo = Egreso, devolucion = Ingreso
-            $table->integer('cantidad'); // positivo
+            $table->foreignId('item_id')->nullable()->constrained('items')->cascadeOnDelete();
+            $table->string('accion', 255);
+            $table->enum('tipo', ['Ingreso', 'Egreso', 'Modificacion']);
+            $table->integer('cantidad');
             $table->dateTime('fecha')->useCurrent();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->foreignId('prestamo_id')->nullable()->constrained('prestamos')->nullOnDelete();

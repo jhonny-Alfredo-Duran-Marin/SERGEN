@@ -3,6 +3,7 @@
 use App\Http\Controllers\AreaController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CompraController;
+use App\Http\Controllers\ConsumoController;
 use App\Http\Controllers\DevolucionController;
 use App\Http\Controllers\DotacionController;
 use App\Http\Controllers\IncidenteController;
@@ -22,7 +23,7 @@ use App\Http\Controllers\UserRoleController;
 use Illuminate\Support\Facades\Auth;
 // web.php
 Route::get('/', fn() => view('welcome'));
-Auth::routes();
+Auth::routes(['register' => false]);
 
 Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
 
@@ -90,6 +91,11 @@ Route::resource('sucursal', SucursalController::class)->names('sucursal');
 
 // PRÉSTAMOS
 Route::resource('prestamos', PrestamoController::class)->names('prestamos');
+Route::get(
+    '/prestamos/{prestamo}/imprimir',
+    [PrestamoController::class, 'ImpresionPrestamo']
+)->name('prestamos.imprimir');
+
 
 // DEVOLUCIONES (anidadas)
 Route::get('prestamos/{prestamo}/devoluciones/create', [DevolucionController::class, 'create'])
@@ -100,36 +106,32 @@ Route::post('prestamos/{prestamo}/devoluciones', [DevolucionController::class, '
     ->middleware('permission:devoluciones.create');
 
 // DOTACIONES
-Route::get('/dotaciones', [DotacionController::class,'index'])->name('dotaciones.index');
-Route::get('/dotaciones/create', [DotacionController::class,'create'])->name('dotaciones.create');
-Route::post('/dotaciones', [DotacionController::class,'store'])->name('dotaciones.store');
+Route::get('/dotaciones', [DotacionController::class, 'index'])->name('dotaciones.index');
+Route::get('/dotaciones/create', [DotacionController::class, 'create'])->name('dotaciones.create');
+Route::post('/dotaciones', [DotacionController::class, 'store'])->name('dotaciones.store');
 
-Route::get('/dotaciones/{dotacion}', [DotacionController::class,'show'])->name('dotaciones.show');
-Route::get('/dotaciones/{dotacion}/edit', [DotacionController::class,'edit'])->name('dotaciones.edit');
-Route::put('/dotaciones/{dotacion}', [DotacionController::class,'update'])->name('dotaciones.update');
-Route::delete('/dotaciones/{dotacion}', [DotacionController::class,'destroy'])->name('dotaciones.destroy');
+Route::get('/dotaciones/{dotacion}', [DotacionController::class, 'show'])->name('dotaciones.show');
+Route::get('/dotaciones/{dotacion}/edit', [DotacionController::class, 'edit'])->name('dotaciones.edit');
+Route::put('/dotaciones/{dotacion}', [DotacionController::class, 'update'])->name('dotaciones.update');
+Route::delete('/dotaciones/{dotacion}', [DotacionController::class, 'destroy'])->name('dotaciones.destroy');
 
-Route::get('/dotaciones/{dotacion}/devolver', [DotacionController::class,'formDevolver'])->name('dotaciones.devolver.form');
-Route::post('/dotaciones/{dotacion}/devolver', [DotacionController::class,'procesarDevolucion'])->name('dotaciones.devolver.store');
-Route::get('/dotaciones/{dotacion}/pdf', [DotacionController::class, 'pdf'])
-    ->name('dotaciones.pdf');
+Route::get('/dotaciones/{dotacion}/devolver', [DotacionController::class, 'formDevolver'])->name('dotaciones.devolver.form');
+Route::post('/dotaciones/{dotacion}/devolver', [DotacionController::class, 'procesarDevolucion'])->name('dotaciones.devolver.store');
+Route::get('dotaciones/{dotacion}/recibo', [DotacionController::class, 'imprimirRecibo'])->name('dotaciones.recibo');
 
 
 Route::resource('kits', KitEmergenciaController::class)
     ->names('kits');
 Route::get('api/items/search', [ItemSearchController::class, 'search'])
-    ->name('items.search') // ?q=
-    ->middleware('permission:kits.create');
-// INCIDENTES (desde préstamo)
-Route::post('prestamos/{prestamo}/incidentes', [PrestamoController::class, 'storeIncidente'])
-    ->name('prestamos.incidentes.store')
-    ->middleware('permission:prestamos.incidentes.store');
+    ->name('items.search');
+Route::get(
+    'prestamos/{prestamo}/imprimir-historial',
+    [PrestamoController::class, 'ImpresionHistorial']
+)->name('prestamos.imprimir.historial');
 
 Route::resource('compras', CompraController::class);
 Route::patch('compras/{compra}/resolver', [CompraController::class, 'resolver'])->name('compras.resolver');
-// routes/web.php
 
-// routes/web.php
 Route::get('/movimientos', [MovimientoController::class, 'index'])
     ->name('movimientos.index')
     ->middleware('auth');
@@ -159,14 +161,26 @@ Route::get(
     ->name('incidentes.recibo');
 
 
-// DEVOLUCIONES (anidadas)
-Route::get('prestamos/{prestamo}/devoluciones/create', [DevolucionController::class, 'form'])
-    ->name('devoluciones.create')
-    ->middleware('permission:devoluciones.create');
+Route::resource('prestamos', PrestamoController::class);
 
+// Rutas de devoluciones
+Route::get('prestamos/{prestamo}/devoluciones', [DevolucionController::class, 'index'])
+    ->name('devoluciones.index');
+Route::get('prestamos/{prestamo}/devoluciones/create', [DevolucionController::class, 'create'])
+    ->name('devoluciones.create');
 Route::post('prestamos/{prestamo}/devoluciones', [DevolucionController::class, 'store'])
-    ->name('devoluciones.store')
-    ->middleware('permission:devoluciones.create');
+    ->name('devoluciones.store');
 
+// Impresión de devoluciones
+Route::get('devoluciones/{devolucion}/recibo', [DevolucionController::class, 'imprimirRecibo'])
+    ->name('devoluciones.imprimir.recibo');
+Route::get('prestamos/{prestamo}/devoluciones/historial-pdf', [DevolucionController::class, 'imprimirHistorial'])
+    ->name('devoluciones.imprimir.historial');
+Route::post('devoluciones/{devolucion}/anular', [DevolucionController::class, 'anular'])->name('devoluciones.anular');
+
+Route::get('consumos', [ConsumoController::class, 'index'])->name('consumos.index');
+Route::get('consumos/pdf', [ConsumoController::class, 'reportepdf'])->name('consumos.pdf'); // Reporte de todo el proyecto
+Route::get('consumos/{consumo}/recibo', [ConsumoController::class, 'imprimirRecibo'])->name('consumos.recibo'); // Recibo de una sola fila
+Route::get('consumos/{consumo}', [ConsumoController::class, 'show'])->name('consumos.show');
 
 //});

@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignId('kit_emergencia_id')->constrained('kit_emergencias')->cascadeOnDelete();
             $table->foreignId('item_id')->constrained('items')->cascadeOnDelete();
             $table->unsignedInteger('cantidad')->default(1);
+            $table->enum('estado', ['Activo', 'Pasivo'])->default('Activo');
             $table->timestamps();
 
             $table->unique(['kit_emergencia_id', 'item_id']);

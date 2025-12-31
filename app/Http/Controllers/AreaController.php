@@ -54,7 +54,7 @@ class AreaController extends Controller
             'descripcion' => ['required', 'string', 'max:150', 'unique:areas,descripcion'],
             'estado'      => ['required', Rule::in(['Activo', 'Pasivo'])],
             // AÑADIR VALIDACIÓN PARA sucursal_id
-            'sucursal_id' => ['required', 'integer', 'exists:sucursales,id'],
+            'sucursal_id' => ['required', 'integer', 'exists:sucursal,id'],
         ]);
         Area::create($data);
         return redirect()->route('areas.index')->with('status', 'Area creada.');
@@ -73,7 +73,7 @@ class AreaController extends Controller
             'descripcion' => ['required', 'string', 'max:150', Rule::unique('areas', 'descripcion')->ignore($area->id)],
             'estado'      => ['required', Rule::in(['Activo', 'Pasivo'])],
             // AÑADIR VALIDACIÓN PARA sucursal_id
-            'sucursal_id' => ['required', 'integer', 'exists:sucursales,id'],
+            'sucursal_id' => ['required', 'integer', 'exists:sucursaL,id'],
         ]);
         $area->update($data);
         return redirect()->route('areas.index')->with('status', 'Area actualizada.');

@@ -12,7 +12,7 @@
 @stop
 
 @section('content')
-    @if(session('status'))
+    @if (session('status'))
         <x-adminlte-alert theme="success" dismissible>
             <i class="fas fa-check-circle"></i> {{ session('status') }}
         </x-adminlte-alert>
@@ -82,11 +82,8 @@
                     <div class="col-md-3">
                         <div class="form-group">
                             <label><i class="fas fa-search"></i> Buscar Persona:</label>
-                            <input type="text"
-                                   name="q"
-                                   class="form-control"
-                                   value="{{ request('q') }}"
-                                   placeholder="Nombre de la persona">
+                            <input type="text" name="q" class="form-control" value="{{ request('q') }}"
+                                placeholder="Nombre de la persona">
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -94,9 +91,8 @@
                             <label><i class="fas fa-user"></i> Persona Específica:</label>
                             <select name="persona_id" class="form-control">
                                 <option value="">— Todas —</option>
-                                @foreach($personas as $p)
-                                    <option value="{{ $p->id }}"
-                                            @selected(request('persona_id') == $p->id)>
+                                @foreach ($personas as $p)
+                                    <option value="{{ $p->id }}" @selected(request('persona_id') == $p->id)>
                                         {{ $p->nombre }}
                                     </option>
                                 @endforeach
@@ -106,19 +102,13 @@
                     <div class="col-md-2">
                         <div class="form-group">
                             <label><i class="fas fa-calendar"></i> Desde:</label>
-                            <input type="date"
-                                   name="desde"
-                                   class="form-control"
-                                   value="{{ request('desde') }}">
+                            <input type="date" name="desde" class="form-control" value="{{ request('desde') }}">
                         </div>
                     </div>
                     <div class="col-md-2">
                         <div class="form-group">
                             <label><i class="fas fa-calendar"></i> Hasta:</label>
-                            <input type="date"
-                                   name="hasta"
-                                   class="form-control"
-                                   value="{{ request('hasta') }}">
+                            <input type="date" name="hasta" class="form-control" value="{{ request('hasta') }}">
                         </div>
                     </div>
                     <div class="col-md-2">
@@ -148,119 +138,118 @@
             </div>
         </div>
         <div class="card-body p-0">
-            @if($dotaciones->count() > 0)
-            <div class="table-responsive">
-                <table class="table table-striped table-hover mb-0">
-                    <thead class="bg-light">
-                        <tr>
-                            <th width="50">#</th>
-                            <th width="80">ID</th>
-                            <th><i class="fas fa-user"></i> Persona</th>
-                            <th><i class="fas fa-calendar"></i> Fecha</th>
-                            <th class="text-center"><i class="fas fa-box"></i> Items</th>
-                            <th class="text-center"><i class="fas fa-toggle-on"></i> Estado</th>
-                            <th width="220" class="text-center"><i class="fas fa-cog"></i> Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($dotaciones as $d)
-                        <tr>
-                            <td class="text-muted">
-                                {{ $loop->iteration + ($dotaciones->currentPage() - 1) * $dotaciones->perPage() }}
-                            </td>
-                            <td>
-                                <a href="{{ route('dotaciones.show', $d) }}"
-                                   class="text-primary font-weight-bold">
-                                    <i class="fas fa-external-link-alt"></i> #{{ $d->id }}
-                                </a>
-                            </td>
-                            <td>
-                                <strong>{{ $d->persona->nombre }}</strong>
-                            </td>
-                            <td>
-                                {{ $d->fecha }}
-                                <br>
-                                <small class="text-muted">
-                                    {{ $d->fecha }}
-                                </small>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge badge-info">
-                                    {{ $d->items->count() }}
-                                </span>
-                            </td>
-                            <td class="text-center">
-                                @php
-                                    $estadoBadge = [
-                                        'ABIERTA' => ['class' => 'warning', 'icon' => 'folder-open'],
-                                        'DEVUELTA' => ['class' => 'success', 'icon' => 'check-circle'],
-                                        'COMPLETADA' => ['class' => 'primary', 'icon' => 'flag-checkered']
-                                    ];
-                                    $badge = $estadoBadge[$d->estado_final] ?? ['class' => 'secondary', 'icon' => 'question'];
-                                @endphp
-                                <span class="badge badge-{{ $badge['class'] }}">
-                                    <i class="fas fa-{{ $badge['icon'] }}"></i>
-                                    {{ $d->estado_final }}
-                                </span>
-                            </td>
-                            <td class="text-center">
-                                <div class="btn-group" role="group">
-                                    <a href="{{ route('dotaciones.show', $d) }}"
-                                       class="btn btn-sm btn-info"
-                                       data-toggle="tooltip"
-                                       title="Ver detalles">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
+            @if ($dotaciones->count() > 0)
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover mb-0">
+                        <thead class="bg-light">
+                            <tr>
+                                <th width="50">#</th>
+                                <th width="80">ID</th>
+                                <th><i class="fas fa-user"></i> Persona</th>
+                                <th><i class="fas fa-calendar"></i> Fecha</th>
+                                <th class="text-center"><i class="fas fa-box"></i> Items</th>
+                                <th class="text-center"><i class="fas fa-toggle-on"></i> Estado</th>
+                                <th width="220" class="text-center"><i class="fas fa-cog"></i> Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($dotaciones as $d)
+                                <tr>
+                                    <td class="text-muted">
+                                        {{ $loop->iteration + ($dotaciones->currentPage() - 1) * $dotaciones->perPage() }}
+                                    </td>
+                                    <td>
+                                        <a href="{{ route('dotaciones.show', $d) }}"
+                                            class="text-primary font-weight-bold">
+                                            <i class="fas fa-external-link-alt"></i> #{{ $d->id }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <strong>{{ $d->persona->nombre }}</strong>
+                                    </td>
+                                    <td>
+                                        {{ $d->fecha }}
+                                        <br>
+                                        <small class="text-muted">
+                                            {{ $d->fecha }}
+                                        </small>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge badge-info">
+                                            {{ $d->items->count() }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        @php
+                                            $estadoBadge = [
+                                                'ABIERTA' => ['class' => 'warning', 'icon' => 'folder-open'],
+                                                'DEVUELTA' => ['class' => 'success', 'icon' => 'check-circle'],
+                                                'COMPLETADA' => ['class' => 'primary', 'icon' => 'flag-checkered'],
+                                            ];
+                                            $badge = $estadoBadge[$d->estado_final] ?? [
+                                                'class' => 'secondary',
+                                                'icon' => 'question',
+                                            ];
+                                        @endphp
+                                        <span class="badge badge-{{ $badge['class'] }}">
+                                            <i class="fas fa-{{ $badge['icon'] }}"></i>
+                                            {{ $d->estado_final }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-flex justify-content-center align-items-center">
+                                            {{-- 1. Ver detalles (Info) --}}
+                                            <a href="{{ route('dotaciones.show', $d) }}"
+                                                class="btn btn-sm btn-info mx-1 shadow-sm" data-toggle="tooltip"
+                                                title="Ver detalles">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
 
-                                    <a href="{{ route('dotaciones.edit', $d) }}"
-                                       class="btn btn-sm btn-warning"
-                                       data-toggle="tooltip"
-                                       title="Editar dotación">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
+                                            {{-- 2. Editar (Warning) --}}
+                                            <a href="{{ route('dotaciones.edit', $d) }}"
+                                                class="btn btn-sm btn-warning mx-1 shadow-sm" data-toggle="tooltip"
+                                                title="Editar dotación">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
 
-                                    @if($d->estado_final === 'ABIERTA')
-                                    <a href="{{ route('dotaciones.devolver.form', $d) }}"
-                                       class="btn btn-sm btn-success"
-                                       data-toggle="tooltip"
-                                       title="Procesar devolución">
-                                        <i class="fas fa-undo"></i>
-                                    </a>
-                                    @endif
-
-                                    <form action="{{ route('dotaciones.destroy', $d) }}"
-                                          method="POST"
-                                          class="d-inline"
-                                          onsubmit="return confirm('¿Estás seguro de eliminar la dotación #{{ $d->id }}?\n\nEsta acción no se puede deshacer y devolverá los items al inventario.')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button class="btn btn-sm btn-danger"
-                                                data-toggle="tooltip"
-                                                title="Eliminar dotación">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
+                                            {{-- 3. Imprimir Recibo (Rojo/PDF) --}}
+                                            <a href="{{ route('dotaciones.recibo', $d) }}"
+                                                class="btn btn-sm btn-danger mx-1 shadow-sm" target="_blank"
+                                                data-toggle="tooltip" title="Imprimir Recibo PDF">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </a>
+                                            {{-- 5. Eliminar (Formulario) --}}
+                                            <form action="{{ route('dotaciones.destroy', $d) }}" method="POST"
+                                                class="d-inline mx-1"
+                                                onsubmit="return confirm('¿Estás seguro de eliminar la dotación #{{ $d->id }}?\n\nEsta acción no se puede deshacer.')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger shadow-sm"
+                                                    data-toggle="tooltip" title="Eliminar dotación">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
             @else
-            <div class="text-center py-5">
-                <i class="fas fa-gift fa-3x text-muted mb-3"></i>
-                <p class="text-muted">No hay dotaciones registradas</p>
-                <a href="{{ route('dotaciones.create') }}" class="btn btn-success">
-                    <i class="fas fa-plus"></i> Crear primera dotación
-                </a>
-            </div>
+                <div class="text-center py-5">
+                    <i class="fas fa-gift fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No hay dotaciones registradas</p>
+                    <a href="{{ route('dotaciones.create') }}" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Crear primera dotación
+                    </a>
+                </div>
             @endif
         </div>
-        @if($dotaciones->hasPages())
-        <div class="card-footer clearfix">
-            {{ $dotaciones->links() }}
-        </div>
+        @if ($dotaciones->hasPages())
+            <div class="card-footer clearfix">
+                {{ $dotaciones->links() }}
+            </div>
         @endif
     </div>
 
@@ -271,7 +260,8 @@
                 <span class="info-box-icon"><i class="fas fa-info-circle"></i></span>
                 <div class="info-box-content">
                     <span class="info-box-text">Gestión de Dotaciones</span>
-                    <span class="info-box-number">Asigna items a personas de forma permanente y controla devoluciones</span>
+                    <span class="info-box-number">Asigna items a personas de forma permanente y controla
+                        devoluciones</span>
                 </div>
             </div>
         </div>
@@ -279,22 +269,23 @@
 @stop
 
 @section('css')
-<style>
-    .small-box > .inner {
-        padding: 15px;
-    }
-    .small-box .icon {
-        font-size: 70px;
-        top: 10px;
-        right: 15px;
-    }
-</style>
+    <style>
+        .small-box>.inner {
+            padding: 15px;
+        }
+
+        .small-box .icon {
+            font-size: 70px;
+            top: 10px;
+            right: 15px;
+        }
+    </style>
 @stop
 
 @section('js')
-<script>
-    $(function() {
-        $('[data-toggle="tooltip"]').tooltip();
-    });
-</script>
+    <script>
+        $(function() {
+            $('[data-toggle="tooltip"]').tooltip();
+        });
+    </script>
 @stop

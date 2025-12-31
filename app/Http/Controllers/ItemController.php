@@ -122,7 +122,7 @@ class ItemController extends Controller
             'cantidad'       => ['required', 'integer', 'min:0'],
             'piezas'         => ['nullable', 'integer', 'min:0'],
             'costo_unitario' => ['required', 'numeric', 'min:0', 'max:99999999999.99'],
-            'estado'         => ['required', Rule::in(['Activo', 'Pasivo'])],
+            'estado'         => ['required', Rule::in(['Activo', 'Pasivo', 'Disponible', 'Prestado', 'Dotado', 'Observacion', 'Baja', 'Reservado'])],
             'tipo'           => ['required', Rule::in(['Herramienta', 'Material'])],
             'ubicacion'      => ['nullable', 'string', 'max:150'],
             'fecha_registro' => ['nullable', 'date'],
@@ -159,7 +159,7 @@ class ItemController extends Controller
         if (isset($tmpPath)) {
             ProcessItemImages::dispatch($item, $tmpPath);
         }
-        $item->registrarMovimiento("CREAR_ITEM", $item->cantidad, "Item creado");
+        $item->registrarMovimiento("Ingreso", "Registro", $item->cantidad, null, "Registro de Item Nuevo");
 
         return redirect()->route('items.index')->with('status', 'Item creado.');
     }
@@ -190,14 +190,16 @@ class ItemController extends Controller
             'cantidad'       => ['required', 'integer', 'min:0'],
             'piezas'         => ['nullable', 'integer', 'min:0'],
             'costo_unitario' => ['required', 'numeric', 'min:0', 'max:99999999999.99'],
-            'estado'         => ['required', Rule::in(['Activo', 'Pasivo'])],
+            'descuento'      => ['required', 'numeric', 'min:0', 'max:99999999999.99'],
+            'estado'         => ['required', Rule::in(['Activo', 'Pasivo', 'Disponible', 'Prestado', 'Dotado', 'Observacion', 'Baja', 'Reservado'])],
             'tipo'           => ['required', Rule::in(['Herramienta', 'Material'])],
             'ubicacion'      => ['nullable', 'string', 'max:150'],
             'fecha_registro' => ['nullable', 'date'],
             'imagen'         => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5048'],
             'remove_imagen'  => ['nullable', 'boolean'],
         ]);
-
+        $copia = $item->replicate();
+ 
         $oldOriginal = $item->imagen_path;
         $oldThumb    = $item->imagen_thumb;
 
@@ -208,6 +210,7 @@ class ItemController extends Controller
             $data['imagen_path']  = null;
             $data['imagen_thumb'] = null;
             $oldOriginal = $oldThumb = null;
+            $item->registrarMovimiento("Modificacion", "CAMBIO_FOTO", $item->cantidad, null, "remoción de imagen del item");
         }
 
         // Subir nueva imagen -> generar nueva THUMB síncrona y encolar Job para original
@@ -242,25 +245,51 @@ class ItemController extends Controller
         if ($tmpPath) {
             ProcessItemImages::dispatch($item, $tmpPath);
         }
-        $item->registrarMovimiento("EDITAR_ITEM", null, "Item actualizado");
+
         if ($item->wasChanged('cantidad')) {
             $item->registrarMovimiento(
-                $item->cantidad > $item->getOriginal('cantidad') ? "AUMENTO_STOCK" : "DESCUENTO_STOCK",
-                abs($item->cantidad - $item->getOriginal('cantidad')),
+                "Modificacion",
+                $item->cantidad >  $copia->cantidad ? "AUMENTO_STOCK" : "DESCUENTO_STOCK",
+                abs($item->cantidad - $copia->cantidad),
                 "Cambio en cantidad"
+            );
+        }
+        if ($item->wasChanged('descripcion')) {
+            $item->registrarMovimiento("Modificacion", "CAMBIO_DESCRIPCION", $item->cantidad, "Descripción actualizada");
+        }
+        if ($item->wasChanged('fabricante')) {
+            $item->registrarMovimiento("Modificacion", "CAMBIO_FABRICANTE", $item->cantidad, "Fabricante actualizado");
+        }
+        if ($item->wasChanged('piezas')) {
+            $item->registrarMovimiento(
+                "Modificacion",
+                $item->piezas > $copia->piezas ? "AUMENTO_PIEZAS" : "DESCUENTO_PIEZAS",
+                abs($item->piezas - $copia->piezas),
+                "Cambio en piezas"
             );
         }
 
         if ($item->wasChanged('costo_unitario')) {
-            $item->registrarMovimiento("CAMBIO_COSTO", $item->cantidad, "Antes: {$item->getOriginal('costo_unitario')} — Después: {$item->costo_unitario}");
+            $item->registrarMovimiento("Modificacion", "CAMBIO_COSTO", $item->cantidad, "Antes: {$copia->costo_unitario} — Después: {$item->costo_unitario}");
         }
-
+        if ($item->wasChanged('descuento')) {
+            $item->registrarMovimiento("Modificacion", "CAMBIO_DESCUENTO", $item->cantidad, "Antes: {$copia->descuento} — Después: {$item->descuento}");
+        }
         if ($item->wasChanged('estado')) {
-            $item->registrarMovimiento("CAMBIO_ESTADO", $item->cantidad, "Estado actualizado");
+            $item->registrarMovimiento("Modificacion", "CAMBIO_ESTADO", $item->cantidad, "Estado actualizado");
         }
 
         if ($item->wasChanged('ubicacion')) {
-            $item->registrarMovimiento("CAMBIO_UBICACION", $item->cantidad, "Nueva ubicación: {$item->ubicacion}");
+            $item->registrarMovimiento("Modificacion", "CAMBIO_UBICACION", $item->cantidad, "Nueva ubicación: {$item->ubicacion}");
+        }
+         if ($item->wasChanged('area_id')) {
+            $item->registrarMovimiento("Modificacion", "CAMBIO_AREA", $item->cantidad,  "Nueva área: {$item->area->descripcion}");
+        }
+          if ($item->wasChanged('categoria_id')) {
+            $item->registrarMovimiento("Modificacion", "CAMBIO_CATEGORIA", $item->cantidad,  "Nueva categoría: {$item->categoria->descripcion}");
+        }
+           if ($item->wasChanged('medida_id')) {
+            $item->registrarMovimiento("Modificacion", "CAMBIO_MEDIDA", $item->cantidad, "Nueva medida: {$item->medida->descripcion}");
         }
 
         return redirect()->route('items.index')->with('status', 'Item actualizado.');

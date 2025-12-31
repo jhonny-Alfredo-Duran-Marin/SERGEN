@@ -24,6 +24,7 @@ class Compra extends Model
         'estado_procesamiento',
         'user_id',
         'imagen',
+        'qr',
     ];
 
     /**

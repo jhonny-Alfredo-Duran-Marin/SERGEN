@@ -10,8 +10,10 @@ use App\Models\{
     Persona,
     Proyecto,
     Movimiento,
-    KitEmergencia
+    KitEmergencia,
+    KitPrestamo
 };
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -24,10 +26,10 @@ class PrestamoController extends Controller
     public function index(Request $request)
     {
         $stats = [
-            'total'       => Prestamo::count(),
-            'completos'   => Prestamo::where('estado', 'Completo')->count(),
-            'activos'     => Prestamo::where('estado', 'Activo')->count(),
-            'observados'  => Prestamo::where('estado', 'Observado')->count(),
+            'total'      => Prestamo::count(),
+            'completos'  => Prestamo::where('estado', 'Completo')->count(),
+            'activos'    => Prestamo::where('estado', 'Activo')->count(),
+            'observados' => Prestamo::where('estado', 'Observado')->count(),
         ];
 
         $q = $request->string('q')->toString();
@@ -36,11 +38,13 @@ class PrestamoController extends Controller
         $query = Prestamo::with([
             'persona:id,nombre',
             'proyecto:id,codigo,descripcion',
-            'detalles.item:id,descripcion'
+            'detalles.item:id,descripcion',
+            'kits:id,codigo,nombre'
         ]);
 
+
         if ($q !== '') $query->where('codigo', 'like', "%{$q}%");
-        if (in_array($estado, ['Activo','Observado','Completo'])) {
+        if (in_array($estado, ['Activo', 'Observado', 'Completo'])) {
             $query->where('estado', $estado);
         }
 
@@ -54,11 +58,41 @@ class PrestamoController extends Controller
        ============================================================ */
     public function create()
     {
-        $personas = Persona::orderBy('nombre')->get(['id','nombre']);
-        $proyectos = Proyecto::orderBy('codigo')->get(['id','codigo','descripcion']);
-        $items = Item::orderBy('descripcion')->get(['id','descripcion','codigo','cantidad','costo_unitario']);
+        $personas = Persona::where('estado', '1')->orderBy('nombre')->get(['id', 'nombre']);
+        $proyectos = Proyecto::where('estado', 'Abierto')->orderBy('codigo')->get(['id', 'codigo', 'descripcion']);
 
-        return view('prestamos.create', compact('personas','proyectos','items'));
+        $itemsRaw = Item::where('estado', 'Disponible')
+            ->orderBy('descripcion')
+            ->get();
+
+        $items = $itemsRaw->map(fn($i) => [
+            'id' => $i->id,
+            'codigo' => $i->codigo,
+            'nombre' => $i->descripcion,
+            'stock' => $i->cantidad,
+            'costo' => (float) $i->costo_unitario
+        ]);
+
+        // Solo cargamos Kits que estén Disponibles
+        $kitsData = KitEmergencia::with('items')
+            ->where('estado', 'Activo')
+            ->get()
+            ->map(function ($kit) {
+                return [
+                    'id' => $kit->id,
+                    'codigo' => $kit->codigo,
+                    'nombre' => $kit->nombre,
+                    'costo_total' => (float) $kit->items->sum(fn($item) => $item->pivot->cantidad * $item->costo_unitario),
+                    'detalles' => $kit->items->map(fn($i) => [
+                        'nombre' => $i->descripcion,
+                        'cantidad' => $i->pivot->cantidad
+                    ])
+                ];
+            });
+
+        return view('prestamos.create', compact('personas', 'proyectos', 'items'))
+            ->with('itemsJson', $items->toJson())
+            ->with('kitsJson', $kitsData->toJson());
     }
 
     /* ============================================================
@@ -67,148 +101,135 @@ class PrestamoController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'codigo'            => 'required|string|max:50|unique:prestamos,codigo',
-            'fecha'             => 'required|date',
-            'persona_id'        => 'required|exists:personas,id',
-            'proyecto_id'       => 'nullable|exists:proyectos,id',
-            'nota'              => 'nullable|string',
-            'kit_emergencia_id' => 'nullable|exists:kit_emergencias,id',
-            'cant_item'         => 'array',
-            'cant_item.*'       => 'integer|min:1',
+            'codigo'               => 'required|string|max:50|unique:prestamos,codigo',
+            'fecha'                => 'required|date',
+            'persona_id'           => 'required|exists:personas,id',
+            'proyecto_id'          => 'nullable|exists:proyectos,id',
+            'nota'                 => 'nullable|string',
+            'kits_seleccionados'   => 'nullable|array',
+            'kits_seleccionados.*' => 'exists:kit_emergencias,id',
+            'cant_item'            => 'array',
+            'cant_item.*'          => 'integer|min:1',
         ]);
 
-        DB::transaction(function () use ($request) {
+        try {
+            DB::transaction(function () use ($request) {
+                // 1. Crear Cabecera del Préstamo
+                $prestamo = Prestamo::create([
+                    'codigo'      => $request->codigo,
+                    'fecha'       => $request->fecha,
+                    'persona_id'  => $request->persona_id,
+                    'proyecto_id' => $request->proyecto_id,
+                    'user_id'     => auth()->id(),
+                    'nota'        => $request->nota,
+                    'estado'      => 'Activo',
+                ]);
 
-            /* =====================================
-               CREAR PRESTAMO
-               ===================================== */
-            $prestamo = Prestamo::create([
-                'codigo'            => $request->codigo,
-                'fecha'             => $request->fecha,
-                'persona_id'        => $request->persona_id,
-                'proyecto_id'       => $request->proyecto_id,
-                'user_id'           => auth()->id(),
-                'kit_emergencia_id' => $request->kit_emergencia_id, // SOLO ID DEL KIT
-                'nota'              => $request->nota,
-                'estado'            => 'Activo',
-            ]);
+                // 2. PROCESAR KITS (Tabla Pivote y Estado Pasivo)
+                if ($request->has('kits_seleccionados')) {
 
-            /* =====================================
-               1) DESCONTAR STOCK DEL KIT (si aplica)
-               ===================================== */
-            if ($request->filled('kit_emergencia_id')) {
+                    foreach ($request->kits_seleccionados as $kitId) {
+                        KitPrestamo::create([
+                            'prestamo_id' => $prestamo->id,
+                            'kit_id'      => $kitId,
+                        ]);
 
-                $kit = KitEmergencia::with('items')->findOrFail($request->kit_emergencia_id);
+                        // Pasar Kit a Pasivo
+                        $kit = KitEmergencia::findOrFail($kitId);
+                        $kit->update(['estado' => 'Pasivo']);
+                    }
+                }
 
-                foreach ($kit->items as $kitItem) {
+                // 3. PROCESAR ÍTEMS SUELTOS (Detalles y Lógica de Stock)
+                if ($request->has('cant_item')) {
 
-                    $cant = $kitItem->pivot->cantidad;
-                    $item = Item::lockForUpdate()->find($kitItem->id);
+                    foreach ($request->cant_item as $itemId => $cantidad) {
+                        $cantidad = (int)$cantidad;
+                        if ($cantidad <= 0) continue;
 
-                    if ($item->cantidad < $cant) {
-                        throw \Illuminate\Validation\ValidationException::withMessages([
-                            'kit_emergencia_id' => "Sin stock: {$item->descripcion}"
+                        $item = Item::lockForUpdate()->findOrFail($itemId);
+
+                        if ($item->cantidad < $cantidad) {
+                            throw new \Exception("Stock insuficiente para: {$item->descripcion}");
+                        }
+
+                        // Descontar stock
+                        $item->decrement('cantidad', $cantidad);
+
+                        // Si el stock llega a 0, marcar como Prestado
+                        if ($item->cantidad <= 0) {
+                            $item->update(['estado' => 'Prestado']);
+                        }
+
+                        // Guardar en Detalles
+                        DetallePrestamo::create([
+                            'prestamo_id'       => $prestamo->id,
+                            'item_id'           => $itemId,
+                            'cantidad_prestada' => $cantidad,
+                        ]);
+
+                        // Registrar Movimiento
+                        Movimiento::create([
+                            'item_id'     => $itemId,
+                            'tipo'        => 'Egreso',
+                            'accion'      => 'Prestamo',
+                            'cantidad'    => $cantidad,
+                            'fecha'       => now(),
+                            'user_id'     => auth()->id(),
+                            'prestamo_id' => $prestamo->id,
+                            'nota'        => 'Préstamo suelto ' . $prestamo->codigo,
                         ]);
                     }
-
-                    // descontar stock
-                    $item->decrement('cantidad', $cant);
-                    $item->update(['estado' => 'Prestado']);
-
-                    // movimiento
-                    Movimiento::create([
-                        'item_id'     => $item->id,
-                        'tipo'        => 'Egreso',
-                        'accion'      => 'Prestamo (KIT)',
-                        'cantidad'    => $cant,
-                        'fecha'       => now(),
-                        'user_id'     => auth()->id(),
-                        'prestamo_id' => $prestamo->id,
-                        'nota'        => "Préstamo KIT {$kit->codigo}",
-                    ]);
                 }
-            }
+            });
 
-            /* =====================================
-               2) GUARDAR SOLO ITEMS SUELTOS
-               ===================================== */
-            if ($request->has('cant_item')) {
-
-                foreach ($request->cant_item as $itemId => $cantidad) {
-
-                    $cantidad = (int)$cantidad;
-                    if ($cantidad <= 0) continue;
-
-                    $item = Item::lockForUpdate()->findOrFail($itemId);
-
-                    if ($item->cantidad < $cantidad) {
-                        throw \Illuminate\Validation\ValidationException::withMessages([
-                            "cant_item.$itemId" => "Sin stock: {$item->descripcion}"
-                        ]);
-                    }
-
-                    // descontar stock
-                    $item->decrement('cantidad', $cantidad);
-                    $item->update(['estado' => 'Prestado']);
-
-                    // guardar detalle (SOLO SUELTO)
-                    DetallePrestamo::create([
-                        'prestamo_id'       => $prestamo->id,
-                        'item_id'           => $itemId,
-                        'cantidad_prestada' => $cantidad,
-                        'costo_unitario'    => $item->costo_unitario,
-                        'subtotal'          => $item->costo_unitario * $cantidad,
-                    ]);
-
-                    // movimiento
-                    Movimiento::create([
-                        'item_id'     => $itemId,
-                        'tipo'        => 'Egreso',
-                        'accion'      => 'Prestamo',
-                        'cantidad'    => $cantidad,
-                        'fecha'       => now(),
-                        'user_id'     => auth()->id(),
-                        'prestamo_id' => $prestamo->id,
-                        'nota'        => 'Préstamo ' . $prestamo->codigo,
-                    ]);
-                }
-            }
-        });
-
-        return redirect()
-            ->route('prestamos.index')
-            ->with('status', 'Préstamo creado correctamente.');
+            return redirect()->route('prestamos.index')->with('status', 'Préstamo registrado correctamente.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()])->withInput();
+        }
     }
 
-    /* ============================================================
-       SHOW
-       ============================================================ */
-    public function show(Prestamo $prestamo)
-    {
-        $prestamo->load([
-            'persona',
-            'proyecto',
-            'detalles.item',
-            'devoluciones.detalles',
-            'devoluciones.detalles.item',
-            'kit.items',
-        ]);
-
-        return view('prestamos.show', compact('prestamo'));
-    }
-
-    /* ============================================================
-       EDIT
-       ============================================================ */
     public function edit(Prestamo $prestamo)
     {
-        $prestamo->load('detalles.item');
+        if ($prestamo->devoluciones()->exists()) {
+            return redirect()
+                ->route('prestamos.index')
+                ->withErrors(['error' => 'No se puede editar un préstamo que ya tiene devoluciones registradas.']);
+        }
 
-        $personas = Persona::orderBy('nombre')->get(['id','nombre']);
-        $proyectos = Proyecto::orderBy('codigo')->get(['id','codigo','descripcion']);
-        $items = Item::orderBy('descripcion')->get(['id','descripcion','codigo','cantidad','costo_unitario']);
+        $prestamo->load(['detalles.item', 'kits']);
+        $personas = Persona::where('estado', '1')->orderBy('nombre')->get(['id', 'nombre']);
+        $proyectos = Proyecto::where('estado', 'Abierto')->orderBy('codigo')->get(['id', 'codigo', 'descripcion']);
 
-        return view('prestamos.edit', compact('prestamo','personas','proyectos','items'));
+        // Incluimos los que están en este préstamo y los disponibles
+        $items = Item::orderBy('descripcion')->get()->map(fn($i) => [
+            'id' => $i->id,
+            'codigo' => $i->codigo,
+            'nombre' => $i->descripcion,
+            'stock' => $i->cantidad,
+            'costo' => (float) $i->costo_unitario
+        ]);
+
+        $kitsData = KitEmergencia::with('items')
+            ->where('estado', 'Activo')
+            ->orWhereIn('id', $prestamo->kits->pluck('id'))
+            ->get()
+            ->map(function ($kit) {
+                return [
+                    'id' => $kit->id,
+                    'codigo' => $kit->codigo,
+                    'nombre' => $kit->nombre,
+                    'costo_total' => (float) $kit->items->sum(fn($item) => $item->pivot->cantidad * $item->costo_unitario),
+                    'detalles' => $kit->items->map(fn($i) => [
+                        'nombre' => $i->descripcion,
+                        'cantidad' => $i->pivot->cantidad
+                    ])
+                ];
+            });
+
+        return view('prestamos.edit', compact('prestamo', 'personas',  'proyectos', 'items'))
+            ->with('itemsJson', $items->toJson())
+            ->with('kitsJson', $kitsData->toJson());
     }
 
     /* ============================================================
@@ -217,163 +238,205 @@ class PrestamoController extends Controller
     public function update(Request $request, Prestamo $prestamo)
     {
         $request->validate([
-            'fecha'             => 'required|date',
-            'persona_id'        => 'required|exists:personas,id',
-            'proyecto_id'       => 'nullable|exists:proyectos,id',
-            'nota'              => 'nullable|string',
-            'kit_emergencia_id' => 'nullable|exists:kit_emergencias,id',
-            'cant_item'         => 'array',
-            'cant_item.*'       => 'integer|min:1',
+            'fecha'      => 'required|date',
+            'persona_id' => 'required|exists:personas,id',
+            'proyecto_id' => 'nullable|exists:proyectos,id',
+            'nota'       => 'nullable|string',
+            'kits_seleccionados' => 'nullable|array',
+            'cant_item'  => 'nullable|array',
         ]);
 
         DB::transaction(function () use ($request, $prestamo) {
 
-            /* =====================================
-               ACTUALIZAR CABECERA
-               ===================================== */
-            $prestamo->update([
-                'fecha'             => $request->fecha,
-                'persona_id'        => $request->persona_id,
-                'proyecto_id'       => $request->proyecto_id,
-                'nota'              => $request->nota,
-                'kit_emergencia_id' => $request->kit_emergencia_id ?? null,
-            ]);
+            /* =========================================
+           1 SINCRONIZAR KITS (CLAVE)
+           ========================================= */
 
-            /* =====================================
-               DEVOLVER STOCK DE ITEMS SUELTOS ANTERIORES
-               ===================================== */
+            // IDs nuevos (lo que quedó en el formulario)
+            $kitsNuevos = $request->input('kits_seleccionados', []);
+
+            // IDs actuales en BD
+            $kitsActuales = $prestamo->kits()->pluck('kit_emergencias.id')->toArray();
+
+            // Kits quitados
+            $kitsQuitados = array_diff($kitsActuales, $kitsNuevos);
+
+            // Reactivar kits quitados
+            if (!empty($kitsQuitados)) {
+                KitEmergencia::whereIn('id', $kitsQuitados)
+                    ->update(['estado' => 'Activo']);
+            }
+
+            // Pasar a pasivo los kits nuevos
+            if (!empty($kitsNuevos)) {
+                KitEmergencia::whereIn('id', $kitsNuevos)
+                    ->update(['estado' => 'Pasivo']);
+            }
+
+            //  SINCRONIZACIÓN REAL
+            $prestamo->kits()->sync($kitsNuevos);
+
+            /* =========================================
+           2️ REVERSAR ÍTEMS ANTERIORES
+           ========================================= */
             foreach ($prestamo->detalles as $detalle) {
-
-                $item = $detalle->item;
-
-                $pendiente = $detalle->cantidad_prestada - $detalle->cantidad_devuelta;
-                $item->increment('cantidad', $pendiente);
-
-                if ($item->cantidad > 0 && $item->estado === 'Prestado') {
-                    $item->update(['estado' => 'Activo']);
+                $item = Item::find($detalle->item_id);
+                if ($item) {
+                    $item->increment('cantidad', $detalle->cantidad_prestada);
+                    if ($item->cantidad > 0) {
+                        $item->update(['estado' => 'Disponible']);
+                    }
                 }
-
                 $detalle->delete();
             }
 
-            /* =====================================
-               DESCONTAR STOCK DEL NUEVO KIT (si hay)
-               ===================================== */
-            if ($request->filled('kit_emergencia_id')) {
+            /* =========================================
+           3️ ACTUALIZAR CABECERA
+           ========================================= */
+            $prestamo->update(
+                $request->only(['fecha', 'persona_id', 'proyecto_id', 'nota'])
+            );
 
-                $kit = KitEmergencia::with('items')->findOrFail($request->kit_emergencia_id);
-
-                foreach ($kit->items as $kitItem) {
-
-                    $cant = $kitItem->pivot->cantidad;
-                    $item = Item::lockForUpdate()->find($kitItem->id);
-
-                    if ($item->cantidad < $cant) {
-                        throw \Illuminate\Validation\ValidationException::withMessages([
-                            'kit_emergencia_id' => "Sin stock: {$item->descripcion}"
-                        ]);
-                    }
-
-                    // nuevo descuento
-                    $item->decrement('cantidad', $cant);
-                    $item->update(['estado' => 'Prestado']);
-
-                    Movimiento::create([
-                        'item_id'     => $item->id,
-                        'tipo'        => 'Egreso',
-                        'accion'      => 'Prestamo (KIT)',
-                        'cantidad'    => $cant,
-                        'fecha'       => now(),
-                        'user_id'     => auth()->id(),
-                        'prestamo_id' => $prestamo->id,
-                        'nota'        => "Actualización KIT {$kit->codigo}",
-                    ]);
-                }
-            }
-
-            /* =====================================
-               GUARDAR NUEVOS ITEMS SUELTOS
-               ===================================== */
-            if ($request->has('cant_item')) {
-
+            /* =========================================
+           4️ REGISTRAR ÍTEMS NUEVOS
+           ========================================= */
+            if ($request->filled('cant_item')) {
                 foreach ($request->cant_item as $itemId => $cantidad) {
-
-                    $cantidad = (int)$cantidad;
                     if ($cantidad <= 0) continue;
 
-                    $item = Item::lockForUpdate()->find($itemId);
+                    $item = Item::lockForUpdate()->findOrFail($itemId);
 
                     if ($item->cantidad < $cantidad) {
-                        throw \Illuminate\Validation\ValidationException::withMessages([
-                            "cant_item.$itemId" => "Sin stock: {$item->descripcion}"
-                        ]);
+                        throw new \Exception("Stock insuficiente para {$item->descripcion}");
                     }
 
                     $item->decrement('cantidad', $cantidad);
-                    $item->update(['estado' => 'Prestado']);
+
+                    if ($item->cantidad <= 0) {
+                        $item->update(['estado' => 'Prestado']);
+                    }
 
                     DetallePrestamo::create([
                         'prestamo_id'       => $prestamo->id,
                         'item_id'           => $itemId,
                         'cantidad_prestada' => $cantidad,
                         'costo_unitario'    => $item->costo_unitario,
-                        'subtotal'          => $item->costo_unitario * $cantidad,
-                    ]);
-
-                    Movimiento::create([
-                        'item_id'     => $itemId,
-                        'tipo'        => 'Egreso',
-                        'accion'      => 'Prestamo',
-                        'cantidad'    => $cantidad,
-                        'fecha'       => now(),
-                        'user_id'     => auth()->id(),
-                        'prestamo_id' => $prestamo->id,
-                        'nota'        => 'Actualización ' . $prestamo->codigo,
+                        'subtotal'          => $cantidad * $item->costo_unitario,
                     ]);
                 }
             }
         });
 
         return redirect()
-            ->route('prestamos.show',$prestamo)
-            ->with('status','Préstamo actualizado');
+            ->route('prestamos.index')
+            ->with('status', 'Préstamo actualizado correctamente');
     }
 
-    /* ============================================================
-       INCIDENTE
-       ============================================================ */
-    public function storeIncidente(Request $request, Prestamo $prestamo)
+
+    public function show(Prestamo $prestamo)
     {
-        $data = $request->validate([
-            'item_id' => ['required','exists:items,id'],
-            'tipo'    => ['required', Rule::in(['Falta','Daño','Pérdida','Otro'])],
-            'nota'    => ['nullable','string','max:2000'],
+        $prestamo->load([
+            'persona',
+            'proyecto',
+            'detalles.item',
+            'devoluciones.detalles',
+            'devoluciones.detalles.item',
+            'kits.items'
         ]);
 
-        $existe = $prestamo->detalles()
-            ->where('item_id',$data['item_id'])
-            ->exists();
+        return view('prestamos.show', compact('prestamo'));
+    }
 
-        if (!$existe) {
-            return back()
-                ->withErrors(['item_id'=>'El ítem no pertenece al préstamo'])
-                ->withInput();
-        }
-
-        PrestamoIncidente::create([
-            'prestamo_id' => $prestamo->id,
-            'item_id'     => $data['item_id'],
-            'persona_id'  => $prestamo->persona_id,
-            'user_id'     => auth()->id(),
-            'tipo'        => $data['tipo'],
-            'nota'        => $data['nota'] ?? null,
+    public function ImpresionPrestamo(Prestamo $prestamo)
+    {
+        // 1. Cargar relaciones
+        $prestamo->load([
+            'persona',
+            'proyecto',
+            'detalles.item',
+            'kits.items'
         ]);
 
-        if ($prestamo->estado !== 'Completo') {
-            $prestamo->update(['estado'=>'Observado']);
+        $totalGeneral = 0;
+
+        // 2. Procesar Ítems Sueltos
+        foreach ($prestamo->detalles as $detalle) {
+            $costo = (float) ($detalle->item->costo_unitario ?? 0);
+            $cantidad = (int) $detalle->cantidad_prestada;
+
+            $detalle->costo_unitario_recibo = $costo;
+            $detalle->subtotal_recibo = $cantidad * $costo;
+
+            $totalGeneral += $detalle->subtotal_recibo;
         }
 
-        return back()->with('status','Incidente registrado.');
+        // 3. Procesar Kits
+        foreach ($prestamo->kits as $kit) {
+            $totalKit = 0;
+            foreach ($kit->items as $item) {
+                $costoItem = (float) ($item->costo_unitario ?? 0);
+                $cantItem = (int) $item->pivot->cantidad;
+
+                $item->subtotal_recibo = $cantItem * $costoItem;
+                $totalKit += $item->subtotal_recibo;
+            }
+            $kit->total_kit_recibo = $totalKit;
+            $totalGeneral += $totalKit;
+        }
+
+        // 4. Armar objeto unificado
+        $registro = (object) [
+            'codigo'        => $prestamo->codigo,
+            'fecha'         => $prestamo->fecha ?? $prestamo->created_at,
+            'persona'       => $prestamo->persona,
+            'proyecto'      => $prestamo->proyecto,
+            'detalles'      => $prestamo->detalles,
+            'kits'          => $prestamo->kits,
+            'monto_total'   => $totalGeneral // Guardado dentro de registro
+        ];
+
+        $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('vendor/adminlte/dist/img/logoSer_Gen2.jpg')));
+
+        return Pdf::loadView('recibo', [
+            'registro'   => $registro,
+            'titulo'     => 'RECIBO DE PRÉSTAMO',
+            'tipo'       => 'prestamo',
+            'logoBase64' => $logoBase64,
+        ])->setPaper('a4')->stream("recibo_prestamo_{$prestamo->codigo}.pdf");
+    }
+
+
+
+
+    public function ImpresionHistorial(Prestamo $prestamo)
+    {
+        $prestamo->load([
+            'persona',
+            'proyecto',
+            'detalles.item',
+            'kits.items',
+            'devoluciones.detalles.item'
+        ]);
+
+        $registro = (object) [
+            'codigo'   => $prestamo->codigo,
+            'fecha'    => $prestamo->fecha ?? $prestamo->created_at,
+            'persona'  => $prestamo->persona,
+            'proyecto' => $prestamo->proyecto,
+            'detalles' => $prestamo->detalles,
+            'kits'     => $prestamo->kits,
+            'historial' => $prestamo->devoluciones,
+        ];
+
+        $logoPath = public_path('vendor/adminlte/dist/img/logoSer_Gen2.jpg');
+        $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
+
+        return Pdf::loadView('recibo', [
+            'registro' => $registro,
+            'titulo'   => 'HISTORIAL DE PRÉSTAMO',
+            'tipo'     => 'historial',
+            'logoBase64' => $logoBase64,
+        ])->setPaper('a4')
+            ->stream("historial_prestamo_{$prestamo->codigo}.pdf");
     }
 }
-

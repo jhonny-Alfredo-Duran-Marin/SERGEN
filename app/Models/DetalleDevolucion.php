@@ -6,8 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class DetalleDevolucion extends Model
 {
-     protected $table = 'detalle_devoluciones'; 
-    protected $fillable = ['devolucion_id', 'item_id', 'cantidad'];
+     protected $table = 'detalle_devoluciones';
+    protected $fillable = ['devolucion_id','estado', 'item_id', 'cantidad'];
     public function devolucion()
     {
         return $this->belongsTo(Devolucion::class);

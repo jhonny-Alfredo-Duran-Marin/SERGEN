@@ -64,7 +64,7 @@ return [
     */
 
     'logo' => '<b>Serg.</b>Gen',
-    'logo_img' => 'vendor/adminlte/dist/img/logoSer.Gen2.jpg',
+    'logo_img' => 'vendor/adminlte/dist/img/logoSer_Gen2.jpg',
     'logo_img_class' => 'brand-image img-circle elevation-3',
     'logo_img_xl' => null,
     'logo_img_xl_class' => 'brand-image-xs',
@@ -86,7 +86,7 @@ return [
     'auth_logo' => [
         'enabled' => false,
         'img' => [
-            'path' => 'vendor/adminlte/dist/img/logoSer.Gen2.jpg',
+            'path' => 'vendor/adminlte/dist/img/logoSer_Gen2.jpg',
             'alt' => 'Auth Logo',
             'class' => '',
             'width' => 50,
@@ -113,7 +113,7 @@ return [
         'enabled' => true,
         'mode' => 'fullscreen',
         'img' => [
-            'path' => 'vendor/adminlte/dist/img/logoSer.Gen2.jpg',
+            'path' => 'vendor/adminlte/dist/img/logoSer_Gen2.jpg',
             'alt' => 'AdminLTE Preloader Image',
             'effect' => 'animation__shake',
             'width' => 60,
@@ -260,9 +260,9 @@ return [
     'dashboard_url' => 'home',
     'logout_url' => 'logout',
     'login_url' => 'login',
-    'register_url' => 'register',
-    'password_reset_url' => 'password/reset',
-    'password_email_url' => 'password/email',
+    'register_url' => null,
+    'password_reset_url' => null,
+    'password_email_url' => null,
     'profile_url' => false,
     'disable_darkmode_routes' => false,
 
@@ -302,22 +302,20 @@ return [
 
         // ===== TOPBAR (derecha) =====
         [
-            'type'          => 'navbar-search',
-            'text'          => 'Buscar…',
-            'topnav_right'  => true,
-            // O agrega el permiso a tu seeder o quita esta línea.
-            // 'can'        => 'global.search',
+            'type'         => 'navbar-search',
+            'text'         => 'Buscar…',
+            'topnav_right' => true,
         ],
         [
-            'type'          => 'fullscreen-widget',
-            'topnav_right'  => true,
+            'type'         => 'fullscreen-widget',
+            'topnav_right' => true,
         ],
         [
-            'text'          => 'Perfil',
-            'route'         => 'profile.show',
-            'icon'          => 'fas fa-user',
-            'topnav_right'  => true,
-            'can'           => 'profile.view',
+            'text'         => 'Perfil',
+            'route'        => 'profile.show',
+            'icon'         => 'fas fa-user',
+            'topnav_right' => true,
+            'can'          => 'profile.view',
         ],
 
         // ===== DASHBOARD =====
@@ -331,7 +329,7 @@ return [
 
         // ===== SEGURIDAD =====
         [
-            'header' => 'Seguridad',
+            'header' => 'Seguridad y Accesos',
             'canAny' => ['permissions.view', 'roles.view', 'users.view'],
         ],
         [
@@ -356,7 +354,7 @@ return [
             'active' => ['users', 'users/*'],
         ],
 
-        // ===== PERSONAS & PROYECTOS =====
+        // ===== MAESTROS =====
         [
             'header' => 'Personas & Proyectos',
             'canAny' => ['personas.view', 'proyectos.view'],
@@ -378,46 +376,50 @@ return [
 
         // ===== INVENTARIO =====
         [
-            'header' => 'Inventario',
-            'canAny' => ['categorias.view', 'areas.view', 'medidas.view', 'items.view', 'movimientos.view'],
+            'header' => 'Gestión de Inventario',
+            'canAny' => ['categorias.view', 'areas.view', 'medidas.view', 'items.view', 'movimientos.view', 'sucursal.view'],
         ],
         [
-            'text'   => 'Categorías',
-            'route'  => 'categorias.index',
-            'icon'   => 'fas fa-tags',
-            'can'    => 'categorias.view',
-            'active' => ['categorias', 'categorias/*'],
-        ],
-         [
             'text'   => 'Sucursales',
             'route'  => 'sucursal.index',
-            'icon'   => 'fas fa-sitemap',
+            'icon'   => 'fas fa-city',
             'can'    => 'sucursal.view',
             'active' => ['sucursal', 'sucursal/*'],
         ],
         [
-            'text'   => 'Áreas',
-            'route'  => 'areas.index',
-            'icon'   => 'fas fa-sitemap',
-            'can'    => 'areas.view',
-            'active' => ['areas', 'areas/*'],
-        ],
-        [
-            'text'   => 'Medidas',
-            'route'  => 'medidas.index',
-            'icon'   => 'fas fa-ruler',
-            'can'    => 'medidas.view',
-            'active' => ['medidas', 'medidas/*'],
-        ],
-        [
-            'text'   => 'Items',
-            'route'  => 'items.index',
+            'text'   => 'Áreas y Categorías',
             'icon'   => 'fas fa-boxes',
+            'canAny' => ['areas.view', 'categorias.view'],
+            'submenu' => [
+                [
+                    'text' => 'Áreas',
+                    'route' => 'areas.index',
+                    'icon' => 'fas fa-sitemap',
+                    'can' => 'areas.view',
+                ],
+                [
+                    'text' => 'Categorías',
+                    'route' => 'categorias.index',
+                    'icon' => 'fas fa-tags',
+                    'can' => 'categorias.view',
+                ],
+                [
+                    'text' => 'Medidas',
+                    'route' => 'medidas.index',
+                    'icon' => 'fas fa-ruler',
+                    'can' => 'medidas.view',
+                ],
+            ],
+        ],
+        [
+            'text'   => 'Ítems de Almacén',
+            'route'  => 'items.index',
+            'icon'   => 'fas fa-box-open',
             'can'    => 'items.view',
             'active' => ['items', 'items/*'],
         ],
         [
-            'text'   => 'Movimientos',
+            'text'   => 'Historial Movimientos',
             'route'  => 'movimientos.index',
             'icon'   => 'fas fa-exchange-alt',
             'can'    => 'movimientos.view',
@@ -439,29 +441,15 @@ return [
 
         // ===== OPERACIÓN =====
         [
-            'header' => 'Operación',
-            'canAny' => ['prestamos.view', 'prestamos.create', 'devoluciones.view', 'dotaciones.view', 'incidentes.view', 'kits.view'],
+            'header' => 'Operación Diaria',
+            'canAny' => ['prestamos.view', 'dotaciones.view', 'incidentes.view', 'kits.view', 'consumos.view'],
         ],
         [
-            'text'   => 'Préstamos',
+            'text'   => 'Préstamos y Devoluciones',
             'route'  => 'prestamos.index',
             'icon'   => 'fas fa-handshake',
             'can'    => 'prestamos.view',
             'active' => ['prestamos', 'prestamos/*', 'devoluciones/*'],
-        ],
-        [
-            'text'   => 'Nuevo préstamo',
-            'route'  => 'prestamos.create',
-            'icon'   => 'fas fa-plus-circle',
-            'can'    => 'prestamos.create',
-            'active' => ['prestamos/create'],
-        ],
-        [
-            'text'   => 'Devoluciones',
-            // Si no tienes index, déjalo sin route y solamente sirve para el active
-            'icon'   => 'fas fa-undo',
-            'can'    => 'devoluciones.view',
-            'active' => ['devoluciones', 'devoluciones/*'],
         ],
         [
             'text'   => 'Dotaciones',
@@ -471,14 +459,21 @@ return [
             'active' => ['dotaciones', 'dotaciones/*'],
         ],
         [
+            'text'   => 'Control de Consumos', // NUEVO MÓDULO AGREGADO
+            'route'  => 'consumos.index',
+            'icon'   => 'fas fa-chart-pie',
+           // 'can'    => 'consumos.view',
+            'active' => ['consumos', 'consumos/*'],
+        ],
+        [
             'text'   => 'Incidentes',
-            'route'  => 'incidentes.index', // Solo si implementaste index; si no, quítalo
+            'route'  => 'incidentes.index',
             'icon'   => 'fas fa-exclamation-triangle',
-            'can'    => 'incidentes.view',
+           // 'can'    => 'incidentes.view',
             'active' => ['incidentes', 'incidentes/*'],
         ],
         [
-            'text'   => 'Kits de emergencia',
+            'text'   => 'Kits de Emergencia',
             'route'  => 'kits.index',
             'icon'   => 'fas fa-first-aid',
             'can'    => 'kits.view',
@@ -487,54 +482,38 @@ return [
 
         // ===== REPORTES =====
         [
-            'header' => 'Reportes',
+            'header' => 'Reportes e Informes',
             'canAny' => ['reportes.inventario', 'reportes.prestamos'],
         ],
         [
-            'text'   => 'Resumen de inventario',
+            'text'   => 'Resumen de Inventario',
             'route'  => 'reportes.inventario',
             'icon'   => 'fas fa-clipboard-list',
             'can'    => 'reportes.inventario',
-            'active' => ['reportes/inventario'],
         ],
         [
-            'text'   => 'Préstamos e incidencias',
+            'text'   => 'Préstamos e Incidencias',
             'route'  => 'reportes.prestamos',
-            'icon'   => 'fas fa-file-alt',
+            'icon'   => 'fas fa-file-invoice',
             'can'    => 'reportes.prestamos',
-            'active' => ['reportes/prestamos'],
-        ],
-
-        // ===== BUSCADOR SIDEBAR =====
-        [
-            'header' => 'Buscar',
-            // 'canAny' => ['global.search'], // si defines el permiso
-        ],
-        [
-            'type' => 'sidebar-menu-search',
-            'text' => 'Buscar…',
-            // 'can'  => 'global.search',
         ],
 
         // ===== CUENTA =====
-        [
-            'header' => 'Cuenta',
-            'canAny' => ['profile.view', 'password.change'],
+       /* [
+            'header' => 'Ajustes de Cuenta',
         ],
         [
-            'text'   => 'Perfil',
+            'text'   => 'Mi Perfil',
             'route'  => 'profile.show',
-            'icon'   => 'fas fa-user',
-            'can'    => 'profile.view',
+            'icon'   => 'fas fa-user-circle',
             'active' => ['profile', 'profile/*'],
         ],
         [
-            'text'   => 'Cambiar contraseña',
+            'text'   => 'Seguridad',
             'route'  => 'password.change',
             'icon'   => 'fas fa-lock',
-            'can'    => 'password.change',
             'active' => ['password/change'],
-        ],
+        ],*/
     ],
 
     /*

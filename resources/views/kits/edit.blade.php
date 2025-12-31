@@ -36,6 +36,8 @@
             @include('kits._form', [
                 'kit' => $kit,
                 'itemsAll' => $itemsAll,
+                'itemsForJs' => $itemsForJs, // Asegúrate de que esto se pase
+                'preselect' => $preselect, // Asegúrate de que esto se pase
             ])
         </div>
     </form>

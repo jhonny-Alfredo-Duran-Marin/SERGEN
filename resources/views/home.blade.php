@@ -1,158 +1,177 @@
 @extends('adminlte::page')
 
-@section('title', 'Dashboard')
+@section('title', 'Consola de Gestión Central - Ser.Gen')
 
 @section('content_header')
-    <h1>Dashboard</h1>
+<div class="container-fluid">
+    <div class="row mb-3 align-items-center">
+        <div class="col-sm-6">
+            <h1 class="m-0 text-navy font-weight-bold" style="letter-spacing: -0.5px;">
+                <i class="fas fa-chart-line mr-2"></i>Consola de Gestión Estratégica
+            </h1>
+            <p class="text-muted small mb-0">Constructora Ser.Gen | Monitoreo de Activos y Flujo de Almacén</p>
+        </div>
+        <div class="col-sm-6 text-right">
+            <div class="btn-group shadow-sm">
+                <button class="btn btn-white btn-sm border">
+                    <i class="far fa-calendar-alt mr-1"></i> {{ date('d M, Y') }}
+                </button>
+                <button class="btn btn-navy btn-sm" onclick="window.location.reload()">
+                    <i class="fas fa-sync-alt mr-1"></i> Actualizar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 @stop
 
 @section('content')
-    @if (session('status'))
-        <x-adminlte-alert theme="success" title="OK">{{ session('status') }}</x-adminlte-alert>
-    @endif
-
-    <p class="mb-3">¡Estás autenticado, {{ auth()->user()->name ?? auth()->user()->email }}!</p>
-
-    {{-- KPIs / Small boxes --}}
+<div class="container-fluid">
+    {{-- RESUMEN EJECUTIVO DE ACTIVOS --}}
     <div class="row">
-        <div class="col-md-3 col-sm-6">
-            <div class="small-box bg-primary">
-                <div class="inner">
-                    <h3>{{ $stats['prestamos_activos'] ?? 0 }}</h3>
-                    <p>Préstamos activos</p>
-                </div>
-                <div class="icon"><i class="fas fa-exchange-alt"></i></div>
-                @can('prestamos.view')
-                <a href="{{ route('prestamos.index') }}" class="small-box-footer">Ver préstamos <i class="fas fa-arrow-circle-right"></i></a>
-                @endcan
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="small-box bg-success">
-                <div class="inner">
-                    <h3>{{ $stats['devoluciones_pendientes'] ?? 0 }}</h3>
-                    <p>Devoluciones pendientes</p>
-                </div>
-                <div class="icon"><i class="fas fa-undo-alt"></i></div>
-                @can('prestamos.view')
-                <a href="{{ route('prestamos.index') }}" class="small-box-footer">Gestionar <i class="fas fa-arrow-circle-right"></i></a>
-                @endcan
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="small-box bg-info">
-                <div class="inner">
-                    <h3>{{ $stats['items'] ?? 0 }}</h3>
-                    <p>Items</p>
-                </div>
-                <div class="icon"><i class="fas fa-boxes"></i></div>
-                @can('items.view')
-                <a href="{{ route('items.index') }}" class="small-box-footer">Ver items <i class="fas fa-arrow-circle-right"></i></a>
-                @endcan
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="small-box bg-warning">
-                <div class="inner">
-                    <h3>{{ $stats['stock_bajo'] ?? 0 }}</h3>
-                    <p>Stock bajo (&lt; 5)</p>
-                </div>
-                <div class="icon"><i class="fas fa-exclamation-triangle"></i></div>
-                @can('items.view')
-                <a href="{{ route('items.index') }}" class="small-box-footer">Revisar <i class="fas fa-arrow-circle-right"></i></a>
-                @endcan
-            </div>
-        </div>
-    </div>
+        @php
+            $kpis = [
+                ['label' => 'Valor Total Inventario', 'val' => $stats['items_total'], 'icon' => 'fa-warehouse', 'border' => 'primary', 'desc' => 'Ítems registrados'],
+                ['label' => 'Riesgo de Desabastecimiento', 'val' => $stats['items_bajo_stock'], 'icon' => 'fa-exclamation-triangle', 'border' => 'warning', 'desc' => 'Artículos críticos'],
+                ['label' => 'Operaciones en Campo', 'val' => $stats['prestamos_activos'], 'icon' => 'fa-hard-hat', 'border' => 'info', 'desc' => 'Equipos en préstamo'],
+                ['label' => 'Transacciones del Día', 'val' => $stats['movimientos_hoy'], 'icon' => 'fa-exchange-alt', 'border' => 'success', 'desc' => 'Flujo de hoy'],
+            ];
+        @endphp
 
-    {{-- Accesos rápidos --}}
-    <div class="mb-3 d-flex flex-wrap gap-2">
-        @can('prestamos.create')
-            <a href="{{ route('prestamos.create') }}" class="btn btn-primary"><i class="fas fa-plus-circle me-1"></i> Nuevo préstamo</a>
-        @endcan
-        @can('items.create')
-            <a href="{{ route('items.create') }}" class="btn btn-outline-secondary"><i class="fas fa-plus me-1"></i> Nuevo item</a>
-        @endcan>
-        @can('proyectos.create')
-            <a href="{{ route('proyectos.create') }}" class="btn btn-outline-secondary">Nuevo proyecto</a>
-        @endcan
-        @can('personas.create')
-            <a href="{{ route('personas.create') }}" class="btn btn-outline-secondary">Nueva persona</a>
-        @endcan
-        @can('roles.view') <a href="{{ route('roles.index') }}" class="btn btn-outline-secondary">Roles</a> @endcan
-        @can('permissions.view') <a href="{{ route('permissions.index') }}" class="btn btn-outline-secondary">Permisos</a> @endcan
+        @foreach($kpis as $k)
+        <div class="col-xl-3 col-md-6">
+            <div class="card shadow-sm border-left-lg border-{{ $k['border'] }} mb-4 bg-white">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-{{ $k['border'] }} text-uppercase mb-1">
+                                {{ $k['label'] }}
+                            </div>
+                            <div class="h3 mb-0 font-weight-bold text-gray-800">{{ $k['val'] }}</div>
+                            <div class="text-muted smallest mt-1">{{ $k['desc'] }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas {{ $k['icon'] }} fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endforeach
     </div>
 
     <div class="row">
-        {{-- Últimos préstamos --}}
+        {{-- AUDITORÍA DE TRANSACCIONES --}}
         <div class="col-lg-8">
-            <x-adminlte-card title="Últimos préstamos" theme="light" icon="fas fa-exchange-alt">
-                <div class="table-responsive">
-                    <table class="table table-striped align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Código</th>
-                                <th>Fecha</th>
-                                <th>Destino</th>
-                                <th>Estado</th>
-                                <th class="text-end">Ítems</th>
-                                <th style="width:120px"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @forelse($ultimosPrestamos as $p)
-                            <tr>
-                                <td><strong>{{ $p->codigo }}</strong></td>
-                                <td>{{ \Illuminate\Support\Carbon::parse($p->fecha)->format('Y-m-d') }}</td>
-                                <td>
-                                    @if($p->tipo_destino === 'Persona')
-                                        Persona: {{ $p->persona?->nombre ?? '—' }}
-                                    @elseif($p->tipo_destino === 'Proyecto')
-                                        Proyecto: {{ $p->proyecto?->codigo ?? '—' }}
-                                    @else
-                                        Otro
-                                    @endif
-                                </td>
-                                <td>
-                                    <span class="badge {{ $p->estado === 'Completo' ? 'bg-success' : ($p->estado==='Observado'?'bg-danger':'bg-primary') }}">
-                                        {{ $p->estado }}
-                                    </span>
-                                </td>
-                                <td class="text-end">{{ $p->detalles->count() }}</td>
-                                <td class="text-end">
-                                    @can('prestamos.view')
-                                    <a href="{{ route('prestamos.show',$p) }}" class="btn btn-sm btn-outline-primary">Ver</a>
-                                    @endcan
-                                </td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="6" class="text-center text-muted p-3">Sin registros</td></tr>
-                        @endforelse
-                        </tbody>
-                    </table>
+            <div class="card card-navy card-outline shadow-sm border-0">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h6 class="m-0 font-weight-bold text-navy">
+                        <i class="fas fa-history mr-2 text-muted"></i>Registro de Transacciones Recientes
+                    </h6>
                 </div>
-            </x-adminlte-card>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-borderless table-striped align-middle mb-0">
+                            <thead class="thead-light small font-weight-bold text-muted">
+                                <tr>
+                                    <th class="pl-4">ARTÍCULO</th>
+                                    <th class="text-center">VOLUMEN</th>
+                                    <th>RESPONSABLE</th>
+                                    <th class="text-right pr-4">HORA</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($ultimosMovimientos as $m)
+                                <tr>
+                                    <td class="pl-4 py-3">
+                                        <div class="d-flex align-items-center">
+                                            <div class="icon-circle bg-{{ $m->tipo == 'Ingreso' ? 'success' : 'danger' }}-light mr-3">
+                                                <i class="fas fa-{{ $m->tipo == 'Ingreso' ? 'arrow-down' : 'arrow-up' }} text-{{ $m->tipo == 'Ingreso' ? 'success' : 'danger' }} font-xs"></i>
+                                            </div>
+                                            <div>
+                                                <span class="font-weight-bold d-block text-dark">{{ $m->item->codigo }}</span>
+                                                <span class="smallest text-muted text-uppercase">{{ Str::limit($m->item->descripcion, 35) }}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="text-center align-middle">
+                                        <span class="badge {{ $m->tipo == 'Ingreso' ? 'badge-success' : 'badge-danger' }} px-3 py-1 font-weight-normal shadow-xs">
+                                            {{ $m->tipo == 'Ingreso' ? '+' : '-' }}{{ $m->cantidad }}
+                                        </span>
+                                    </td>
+                                    <td class="align-middle text-muted small"><i class="far fa-user mr-1"></i> {{ $m->user->name }}</td>
+                                    <td class="text-right pr-4 align-middle text-muted smallest font-weight-bold">{{ $m->fecha->format('H:i') }}</td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-light text-center border-0">
+                    <a href="{{ route('movimientos.index') }}" class="small font-weight-bold text-navy">Ver Reporte Maestro de Movimientos <i class="fas fa-chevron-right ml-1"></i></a>
+                </div>
+            </div>
         </div>
 
-        {{-- Alertas de stock --}}
+        {{-- AUDITORÍA DE INVENTARIO CRÍTICO --}}
         <div class="col-lg-4">
-            <x-adminlte-card title="Alertas de stock" theme="light" icon="fas fa-exclamation-triangle">
-                <ul class="list-group mb-0">
-                    @forelse($alertasStock as $it)
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>
-                                <strong>{{ $it->codigo }}</strong> — {{ $it->descripcion }}
-                                <small class="text-muted">({{ $it->medida?->simbolo ?? 'u' }})</small>
-                            </span>
-                            <span class="badge {{ $it->cantidad < 3 ? 'bg-danger' : 'bg-warning' }} rounded-pill">
-                                {{ $it->cantidad }}
-                            </span>
-                        </li>
+            <div class="card card-danger card-outline shadow-sm border-0">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h6 class="m-0 font-weight-bold text-danger">
+                        <i class="fas fa-exclamation-circle mr-2"></i>Alertas de Reabastecimiento
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    @forelse($stockCritico as $i)
+                    <div class="d-flex align-items-center justify-content-between p-3 border-bottom hover-light">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-danger-light p-2 rounded-circle mr-3" style="width:40px; height:40px; line-height:24px; text-align:center;">
+                                <i class="fas fa-box-open text-danger small"></i>
+                            </div>
+                            <div>
+                                <span class="d-block font-weight-bold text-dark small">{{ $i->codigo }}</span>
+                                <span class="smallest text-muted text-truncate d-inline-block" style="max-width: 150px;">{{ $i->descripcion }}</span>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="badge badge-pill badge-danger shadow-xs">{{ $i->cantidad }} u.</span>
+                            <span class="d-block smallest text-muted mt-1">Existencia</span>
+                        </div>
+                    </div>
                     @empty
-                        <li class="list-group-item text-muted">Sin alertas</li>
+                    <div class="p-5 text-center text-muted">
+                        <i class="fas fa-check-circle fa-2x mb-3 text-success"></i>
+                        <p class="small font-weight-bold">Todos los niveles de stock operan con normalidad</p>
+                    </div>
                     @endforelse
-                </ul>
-            </x-adminlte-card>
+                </div>
+                <div class="card-footer bg-white border-0 text-center">
+                    <a href="{{ route('items.index') }}" class="btn btn-sm btn-outline-danger shadow-sm w-100 font-weight-bold">
+                        Solicitud de Reposición
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
+</div>
+@stop
+
+@section('css')
+<style>
+    :root { --sergen-navy: #001f3f; --sergen-slate: #f8f9fc; }
+    .text-navy { color: var(--sergen-navy) !important; }
+    .btn-navy { background: var(--sergen-navy); color: #fff; }
+    .btn-navy:hover { background: #001a35; color: #fff; }
+    .card-navy.card-outline { border-top: 4px solid var(--sergen-navy); }
+    .border-left-lg { border-left: 0.25rem solid !important; }
+    .bg-navy-light { background: rgba(0, 31, 63, 0.05); }
+    .bg-success-light { background: rgba(40, 167, 69, 0.1); }
+    .bg-danger-light { background: rgba(220, 53, 69, 0.1); }
+    .icon-circle { height: 2.5rem; width: 2.5rem; border-radius: 100%; display: flex; align-items: center; justify-content: center; }
+    .smallest { font-size: 0.75rem; }
+    .shadow-xs { box-shadow: 0 .125rem .25rem rgba(0,0,0,.04)!important; }
+    .hover-light:hover { background-color: #fcfcfc; }
+    .card { border-radius: 10px; }
+    .table thead th { border-bottom: 2px solid #edf2f9; }
+</style>
 @stop

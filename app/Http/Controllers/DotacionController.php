@@ -86,12 +86,13 @@ class DotacionController extends Controller
             'persona_id' => ['required', 'exists:personas,id'],
             'fecha'      => ['required', 'date'],
             'items'      => ['required', 'array', 'min:1'],
-            'items.*.item_id' => ['required', 'exists:items,id'],
-            'items.*.cantidad' => ['required', 'integer', 'min:1'],
+            'items.*.item_id'        => ['required', 'exists:items,id'],
+            'items.*.cantidad'       => ['required', 'integer', 'min:1'],
+            'items.*.estado_item'    => ['required', Rule::in(['USO_PROPIO', 'DE_VENTA', 'COMPRADO'])],
+            'items.*.fecha_siguiente' => ['nullable', 'date'],
         ]);
 
         DB::transaction(function () use ($data) {
-
             $dotacion = Dotacion::create([
                 'persona_id'   => $data['persona_id'],
                 'fecha'        => $data['fecha'],
@@ -99,7 +100,6 @@ class DotacionController extends Controller
             ]);
 
             foreach ($data['items'] as $row) {
-
                 $item = Item::lockForUpdate()->find($row['item_id']);
 
                 if ($row['cantidad'] > $item->cantidad) {
@@ -107,10 +107,12 @@ class DotacionController extends Controller
                 }
 
                 DotacionItem::create([
-                    'dotacion_id' => $dotacion->id,
-                    'item_id'     => $row['item_id'],
-                    'cantidad'    => $row['cantidad'],
-                    'estado_item' => 'EN_USO'
+                    'dotacion_id'     => $dotacion->id,
+                    'item_id'         => $row['item_id'],
+                    'cantidad'        => $row['cantidad'],
+                    'estado_item'     => $row['estado_item'],
+                    'fecha_entrega'   => $data['fecha'],
+                    'fecha_siguiente' => $row['fecha_siguiente'],
                 ]);
 
                 $item->decrement('cantidad', $row['cantidad']);
@@ -118,8 +120,7 @@ class DotacionController extends Controller
             }
         });
 
-        return redirect()->route('dotaciones.index')
-            ->with('status', 'Dotación registrada correctamente.');
+        return redirect()->route('dotaciones.index')->with('status', 'Dotación registrada correctamente.');
     }
 
     /* ======================================================
@@ -355,14 +356,25 @@ class DotacionController extends Controller
     }
 
 
-    public function pdf(Dotacion $dotacion)
+    public function imprimirRecibo(Dotacion $dotacion)
     {
+        // Carga ansiosa de relaciones incluyendo el item para el código y descripción
         $dotacion->load(['persona', 'items.item']);
 
-        $pdf = Pdf::loadView('dotaciones.pdf', [
-            'dotacion' => $dotacion
-        ])->setPaper('A4', 'portrait');
+        $logoPath = public_path('vendor/adminlte/dist/img/logoSer_Gen2.jpg');
+        $logoBase64 = file_exists($logoPath)
+            ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
+            : null;
 
-        return $pdf->stream('dotacion-' . $dotacion->id . '.pdf');
+        $data = [
+            'registro'   => $dotacion,
+            'titulo'     => 'RECIBO DE DOTACIÓN N° DOT-' . str_pad($dotacion->id, 4, '0', STR_PAD_LEFT),
+            'logoBase64' => $logoBase64,
+        ];
+
+        $pdf = Pdf::loadView('dotaciones.recibo_pdf', $data);
+
+        // Configuración de papel A4 y retorno del flujo
+        return $pdf->setPaper('a4', 'portrait')->stream("recibo_dotacion_{$dotacion->id}.pdf");
     }
 }

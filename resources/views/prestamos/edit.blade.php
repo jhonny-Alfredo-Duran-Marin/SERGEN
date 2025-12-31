@@ -1,19 +1,41 @@
+{{-- prestamos/edit.blade.php --}}
 @extends('adminlte::page')
-@section('title','Editar préstamo '.$prestamo->codigo)
+
+@section('title', 'Editar Préstamo')
 
 @section('content_header')
-  <div class="d-flex justify-content-between align-items-center">
-    <h1 class="m-0"><i class="fas fa-edit"></i> Editar préstamo <small class="text-muted">{{ $prestamo->codigo }}</small></h1>
-    <a href="{{ route('prestamos.show',$prestamo) }}" class="btn btn-secondary"><i class="fas fa-eye"></i> Ver</a>
-  </div>
+    <h1><i class="fas fa-edit"></i> Editar Préstamo {{ $prestamo->codigo }}</h1>
 @stop
 
 @section('content')
-<form method="POST" action="{{ route('prestamos.update',$prestamo) }}" class="card card-outline card-warning">
-  @csrf @method('PUT')
-  <div class="card-header"><h3 class="card-title"><i class="fas fa-info-circle"></i> Datos</h3></div>
-  <div class="card-body">
-    @include('prestamos.partials.form', ['prestamo'=>$prestamo,'items'=>$items,'personas'=>$personas,'proyectos'=>$proyectos])
-  </div>
-</form>
+    <div class="row">
+        <div class="col-md-11 offset-md-0">
+            <div class="callout callout-warning">
+                <h5><i class="fas fa-info-circle"></i> Editando Préstamo:</h5>
+                <p class="mb-0">
+                    <strong class="text-lg">{{ $prestamo->codigo }}</strong> -
+                    {{ $prestamo->persona->nombre }}
+                </p>
+            </div>
+
+            <form method="POST" action="{{ route('prestamos.update', $prestamo) }}">
+                @csrf
+                @method('PUT')
+                @include('prestamos.partials.form', [
+                    'prestamo' => $prestamo,
+                    'items' => $items,
+                    'personas' => $personas,
+                    'proyectos' => $proyectos
+                ])
+            </form>
+        </div>
+    </div>
+@stop
+
+@section('css')
+<style>
+    .callout {
+        border-left-width: 5px;
+    }
+</style>
 @stop

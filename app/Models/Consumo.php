@@ -12,7 +12,8 @@ class Consumo extends Model
         'persona_id',
         'proyecto_id',
         'cantidad_consumida',
-        'nota'
+        'precio_unitario'
+
     ];
 
     public function item()

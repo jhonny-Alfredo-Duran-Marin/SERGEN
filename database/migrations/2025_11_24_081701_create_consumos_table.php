@@ -18,7 +18,7 @@ return new class extends Migration
             $table->foreignId('persona_id')->nullable()->constrained('personas');
             $table->foreignId('proyecto_id')->nullable()->constrained('proyectos');
             $table->integer('cantidad_consumida');
-            $table->text('nota')->nullable();
+            $table->float('precio_unitario');
             $table->timestamps();
         });
     }

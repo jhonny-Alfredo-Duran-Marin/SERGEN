@@ -2,133 +2,425 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Prestamo;
-use App\Models\Item;
-use App\Models\PrestamoIncidente;
-use App\Models\Consumo;
+use Illuminate\Support\Facades\Hash;
+use App\Models\{
+    Prestamo,
+    Devolucion,
+    DetalleDevolucion,
+    DetalleDevolucionKit,
+    Consumo,
+    Incidente,
+    IncidenteItem,
+    KitEmergencia,
+    Item,
+    Movimiento
+};
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DevolucionController extends Controller
 {
+    public function index(Prestamo $prestamo)
+    {
+        $prestamo->load([
+            'persona',
+            'proyecto',
+            'devoluciones' => fn($q) => $q->orderBy('created_at', 'desc'),
+            'devoluciones.detalles.item',
+            'devoluciones.detallesKit.item',
+            'devoluciones.detallesKit.kit',
+            'devoluciones.user',
+            'kits.items'
+        ]);
+
+        return view('devoluciones.index', compact('prestamo'));
+    }
+
     public function create(Prestamo $prestamo)
     {
-        $prestamo->load('persona', 'kit.items', 'detalles.item');
-        return view('prestamos.devoluciones.create', compact('prestamo'));
+        $prestamo->load(['persona', 'proyecto', 'detalles.item', 'kits.items']);
+
+        $totalesSueltos = DB::table('detalle_devoluciones')
+            ->join('devoluciones', 'detalle_devoluciones.devolucion_id', '=', 'devoluciones.id')
+            ->where('devoluciones.prestamo_id', $prestamo->id)
+            ->where('devoluciones.estado', '!=', 'Anulada')
+            ->whereIn('detalle_devoluciones.estado', ['OK', 'Dañado', 'Perdido', 'Consumido'])
+            ->groupBy('detalle_devoluciones.item_id')
+            ->select('detalle_devoluciones.item_id', DB::raw('SUM(cantidad) as total'))
+            ->pluck('total', 'item_id');
+
+        $totalesKits = DB::table('detalle_devoluciones_kit')
+            ->join('devoluciones', 'detalle_devoluciones_kit.devolucion_id', '=', 'devoluciones.id')
+            ->where('devoluciones.prestamo_id', $prestamo->id)
+            ->where('devoluciones.estado', '!=', 'Anulada')
+            ->whereIn('detalle_devoluciones_kit.estado', ['OK', 'Dañado', 'Perdido', 'Consumido'])
+            ->select('detalle_devoluciones_kit.kit_id', 'detalle_devoluciones_kit.item_id', DB::raw('SUM(cantidad) as total'))
+            ->groupBy('detalle_devoluciones_kit.kit_id', 'detalle_devoluciones_kit.item_id')
+            ->get()
+            ->keyBy(fn($row) => "{$row->kit_id}-{$row->item_id}");
+
+        $itemsSueltos = $prestamo->detalles->map(function ($detalle) use ($totalesSueltos) {
+            $devuelto = $totalesSueltos[$detalle->item_id] ?? 0;
+            $pendiente = $detalle->cantidad_prestada - $devuelto;
+            return $pendiente > 0 ? [
+                'item_id' => $detalle->item_id,
+                'item' => $detalle->item,
+                'prestado' => $detalle->cantidad_prestada,
+                'devuelto' => $devuelto,
+                'pendiente' => $pendiente,
+            ] : null;
+        })->filter()->values();
+
+        $kitsConPendientes = $prestamo->kits->map(function ($kit) use ($totalesKits) {
+            $itemsDelKit = $kit->items->map(function ($item) use ($kit, $totalesKits) {
+                $key = "{$kit->id}-{$item->id}";
+                $devuelto = $totalesKits[$key]->total ?? 0;
+                $pendiente = $item->pivot->cantidad - $devuelto;
+                return $pendiente > 0 ? [
+                    'item_id' => $item->id,
+                    'item' => $item,
+                    'prestado' => $item->pivot->cantidad,
+                    'devuelto' => $devuelto,
+                    'pendiente' => $pendiente,
+                ] : null;
+            })->filter()->values();
+
+            return $itemsDelKit->isNotEmpty() ? [
+                'kit_id' => $kit->id,
+                'kit' => $kit,
+                'items' => $itemsDelKit,
+            ] : null;
+        })->filter()->values();
+
+        return view('devoluciones.create', compact('prestamo', 'itemsSueltos', 'kitsConPendientes'));
     }
 
     public function store(Request $request, Prestamo $prestamo)
     {
-        $items      = $request->items;
-        $prestados  = $request->prestado;
-        $devolver   = $request->devolver;
-        $estados    = $request->estado;
-        $consumidos = $request->consumido ?? []; // checkbox
+        $data = $request->validate(['items' => 'nullable|array', 'kits' => 'nullable|array']);
+        $devolucionId = null;
 
-        // para saber si el kit debe inhabilitarse
-        $kit_con_problemas = false;
+        DB::transaction(function () use ($prestamo, $data, &$devolucionId) {
+            $prestamo->load(['detalles.item', 'kits.items']);
+            $devolucion = Devolucion::create(['prestamo_id' => $prestamo->id, 'user_id' => auth()->id(), 'estado' => 'Pendiente']);
 
-        DB::transaction(function () use (
-            $items, $prestados, $devolver, $estados, $consumidos, $prestamo, &$kit_con_problemas
-        ) {
+            $incidente = null;
+            $todoSinPendientes = true;
+            $num = fn($v) => max(0, (int)($v ?? 0));
 
-            $items_con_problemas = [];
+            $getIncidente = function () use (&$incidente, $prestamo) {
+                if (!$incidente) {
+                    $incidente = Incidente::create([
+                        'codigo' => Incidente::generarCodigo(),
+                        'tipo' => 'PRESTAMO',
+                        'estado' => 'ACTIVO',
+                        'persona_id' => $prestamo->persona_id,
+                        'fecha_incidente' => now(),
+                        'prestamo_id' => $prestamo->id,
+                    ]);
+                }
+                return $incidente;
+            };
 
-            foreach ($items as $index => $itemId) {
+            foreach ($prestamo->detalles as $detalle) {
+                $devAnterior = DB::table('detalle_devoluciones')->join('devoluciones', 'detalle_devoluciones.devolucion_id', '=', 'devoluciones.id')
+                    ->where('devoluciones.prestamo_id', $prestamo->id)->where('detalle_devoluciones.item_id', $detalle->item_id)
+                    ->where('devoluciones.estado', '!=', 'Anulada')->where('detalle_devoluciones.estado', '!=', 'Anulada')->sum('detalle_devoluciones.cantidad');
 
-                $cantidadPrestada = (int)$prestados[$index];
-                $cantidadDevuelta = (int)$devolver[$index];
-                $tipoEstado       = $estados[$index];
+                $pendActual = $detalle->cantidad_prestada - $devAnterior;
+                if ($pendActual <= 0 || !isset($data['items'][$detalle->item_id])) {
+                    if ($pendActual > 0) $todoSinPendientes = false;
+                    continue;
+                }
 
-                $item  = Item::lockForUpdate()->find($itemId);
+                $val = $data['items'][$detalle->item_id];
+                $ok = $num($val['ok']);
+                $dan = $num($val['danado']);
+                $per = $num($val['perdido']);
+                $con = $num($val['consumido']);
+                $totalCerrado = $ok + $dan + $per + $con;
 
-                // ==============================
-                // 1) CONSUMIDO
-                // ==============================
-                if (in_array($itemId, $consumidos)) {
+                if ($totalCerrado > $pendActual) throw new \Exception("Excede pendiente: {$detalle->item->descripcion}");
+                if ($totalCerrado < $pendActual) $todoSinPendientes = false;
 
-                    // si un ítem es consumido, se descuenta del stock
-                    $item->decrement('cantidad', $cantidadDevuelta);
+                if ($ok > 0) {
+                    $this->registrarDetalleDevolucion($devolucion->id, $detalle->item_id, 'OK', $ok, null);
+                    Item::where('id', $detalle->item_id)->increment('cantidad', $ok);
+                    $this->registrarMovimientos($detalle->item_id, $ok, 'Devolución OK', 'Ingreso', $prestamo->id);
+                }
+                if ($con > 0) {
+                    $this->registrarDetalleDevolucion($devolucion->id, $detalle->item_id, 'Consumido', $con, null);
+                    $this->registrarConsumo($detalle->item_id, $prestamo->id, $con);
+                    $this->registrarMovimientos($detalle->item_id, $con, 'Devolución Consumido', 'Egreso', $prestamo->id);
+                }
+                if ($dan > 0) {
+                    $this->registrarIncidente($getIncidente()->id, $detalle->item_id, 'DAÑADO', $dan);
+                    $this->registrarDetalleDevolucion($devolucion->id, $detalle->item_id, 'Dañado', $dan, null);
+                }
+                if ($per > 0) {
+                    $this->registrarIncidente($getIncidente()->id, $detalle->item_id, 'PERDIDO', $per);
+                    $this->registrarDetalleDevolucion($devolucion->id, $detalle->item_id, 'Perdido', $per, null);
+                }
+                $this->darBajaItem($detalle->item_id, $prestamo->id);
+            }
 
-                    if ($item->cantidad <= 0) {
-                        $item->estado = 'Pasivo';
-                        $item->save();
+            foreach ($prestamo->kits as $kit) {
+                $kitTienePendientes = false;
+                foreach ($kit->items as $item) {
+                    $devAnteriorK = DB::table('detalle_devoluciones_kit')->join('devoluciones', 'detalle_devoluciones_kit.devolucion_id', '=', 'devoluciones.id')
+                        ->where('devoluciones.prestamo_id', $prestamo->id)->where('detalle_devoluciones_kit.kit_id', $kit->id)
+                        ->where('detalle_devoluciones_kit.item_id', $item->id)->where('devoluciones.estado', '!=', 'Anulada')
+                        ->where('detalle_devoluciones_kit.estado', '!=', 'Anulada')->sum('detalle_devoluciones_kit.cantidad');
+
+                    $pendK = $item->pivot->cantidad - $devAnteriorK;
+                    if ($pendK <= 0 || !isset($data['kits'][$kit->id][$item->id])) {
+                        if ($pendK > 0) {
+                            $kitTienePendientes = true;
+                            $todoSinPendientes = false;
+                        }
+                        continue;
                     }
 
-                    Consumo::create([
-                        'item_id'            => $itemId,
-                        'prestamo_id'        => $prestamo->id,
-                        'persona_id'         => $prestamo->persona_id,
-                        'proyecto_id'        => $prestamo->proyecto_id,
-                        'cantidad_consumida' => $cantidadDevuelta,
-                        'nota'               => 'Consumo registrado en devolución'
+                    $val = $data['kits'][$kit->id][$item->id];
+                    $ok = $num($val['ok']);
+                    $dan = $num($val['danado']);
+                    $per = $num($val['perdido']);
+                    $con = $num($val['consumido']);
+                    $totalCerrado = $ok + $dan + $per + $con;
+
+                    if ($totalCerrado > $pendK) throw new \Exception("Excede pendiente Kit: {$item->descripcion}");
+                    if ($totalCerrado < $pendK) {
+                        $kitTienePendientes = true;
+                        $todoSinPendientes = false;
+                    }
+
+                    if ($ok > 0) $this->registrarDetalleDevolucion($devolucion->id, $item->id, 'OK', $ok, $kit->id);
+                    if ($con > 0) {
+                        $this->registrarDetalleDevolucion($devolucion->id, $item->id, 'Consumido', $con, $kit->id);
+                        $this->registrarConsumo($item->id, $prestamo->id, $con);
+                    }
+                    if ($dan > 0) $this->registrarIncidente($getIncidente()->id, $item->id, 'DAÑADO', $dan);
+                    if ($per > 0) $this->registrarIncidente($getIncidente()->id, $item->id, 'PERDIDO', $per);
+
+                    if (($pendK - $totalCerrado) <= 0) $this->darBajaItemKit($item->id, $prestamo->id, $kit->id, $ok);
+                }
+                if ($kitTienePendientes && $kit->estado !== 'OBSERVADO') {
+                    $kit->update(['estado' => 'PASIVO']);
+                } elseif (!$kitTienePendientes && $kit->estado !== 'OBSERVADO') {
+                    $kit->update(['estado' => 'ACTIVO']);
+                }
+            }
+
+            $prestamo->update(['estado' => $incidente ? 'Observado' : ($todoSinPendientes ? 'Completo' : 'Activo')]);
+            $devolucion->update(['estado' => $todoSinPendientes ? 'Completa' : 'Parcial']);
+            $devolucionId = $devolucion->id;
+        });
+
+        return redirect()->route('prestamos.show', $prestamo)->with('print_devolucion_id', $devolucionId);
+    }
+
+    public function anular(Request $request, Devolucion $devolucion)
+    {
+        $request->validate(['password' => 'required']);
+        if (!Hash::check($request->password, auth()->user()->password)) return back()->withErrors(['error' => 'Contraseña incorrecta.']);
+        if ($devolucion->created_at->diffInHours(now()) >= 2) return back()->withErrors(['error' => 'Plazo expirado.']);
+
+        try {
+            DB::transaction(function () use ($devolucion) {
+                $prestamo = $devolucion->prestamo;
+                $estadoAntes = $prestamo->estado;
+
+                foreach ($devolucion->detalles as $det) {
+                    $item = Item::findOrFail($det->item_id);
+                    if ($det->estado === 'OK' && $item->cantidad >= $det->cantidad) $item->decrement('cantidad', $det->cantidad);
+                    $this->limpiarTablasDependientes($det, $prestamo->id);
+                    $det->update(['estado' => 'Anulada']);
+                    $this->actualizarEstadoItemAnulacion($item, false);
+                }
+
+                foreach ($devolucion->detallesKit as $dk) {
+                    $this->limpiarTablasDependientes($dk, $prestamo->id);
+
+                    if ($estadoAntes === 'Completo') {
+                        if ($dk->estado !== 'OK' && $dk->estado !== 'Anulada') {
+                            DB::table('kit_emergencia_item')->where('kit_emergencia_id', $dk->kit_id)
+                                ->where('item_id', $dk->item_id)->update(['estado' => 'Activo']);
+                        }
+                    }
+
+                    $dk->update(['estado' => 'Anulada']);
+
+                    $tienePasivos = DB::table('kit_emergencia_item')->where('kit_emergencia_id', $dk->kit_id)
+                        ->where('estado', 'Pasivo')->exists();
+
+                    DB::table('kit_emergencias')->where('id', $dk->kit_id)->update([
+                        'estado' => $tienePasivos ? 'Observado' : 'Pasivo'
                     ]);
 
-                    // seguimos sin generar incidentes en consumidos
-                    continue;
+                    $this->actualizarEstadoItemAnulacion(Item::find($dk->item_id), true);
                 }
 
-                // ==============================
-                // 2) DEVOLUCIÓN NORMAL
-                // ==============================
-                if ($tipoEstado === 'ok') {
+                $hasIncidentes = DB::table('detalle_devoluciones as dd')->join('devoluciones as d', 'dd.devolucion_id', '=', 'd.id')
+                    ->where('d.prestamo_id', $prestamo->id)->where('d.estado', '!=', 'Anulada')->whereIn('dd.estado', ['Dañado', 'Perdido'])->exists() ||
+                    DB::table('detalle_devoluciones_kit as ddk')->join('devoluciones as d', 'ddk.devolucion_id', '=', 'd.id')
+                    ->where('d.prestamo_id', $prestamo->id)->where('d.estado', '!=', 'Anulada')->whereIn('ddk.estado', ['Dañado', 'Perdido'])->exists();
 
-                    // sumamos cantidad devuelta al inventario
-                    $item->increment('cantidad', $cantidadDevuelta);
-                    continue;
-                }
+                $prestamo->update(['estado' => $hasIncidentes ? 'Observado' : 'Activo']);
+                $devolucion->update(['estado' => 'Anulada']);
+            });
 
-                // ==============================
-                // 3) SI ESTA DAÑADO O INCOMPLETO → marcar problema
-                // ==============================
-                if ($tipoEstado === 'dañado' || $tipoEstado === 'faltante') {
+            return redirect()->route('prestamos.show', $devolucion->prestamo_id)->with('status', 'Anulada correctamente.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
 
-                    $item->estado = 'Observado';
-                    $item->save();
-
-                    $items_con_problemas[] = $itemId;
-                    $kit_con_problemas = true;
-                }
-
-            } // foreach
-
-
-            // =============================================================
-            // 4) SI HUBO PROBLEMAS → crear UN SOLO incidente por préstamo
-            // =============================================================
-            if (!empty($items_con_problemas)) {
-
-                PrestamoIncidente::create([
-                    'prestamo_id' => $prestamo->id,
-                    'persona_id'  => $prestamo->persona_id,
-                    'user_id'     => auth()->id(),
-                    'tipo'        => 'Observaciones',
-                    'nota'        => 'Ítems con problemas: '.implode(',',$items_con_problemas)
-                ]);
+    private function limpiarTablasDependientes($det, $pId)
+    {
+        if ($det->estado === 'Consumido') Consumo::where('prestamo_id', $pId)->where('item_id', $det->item_id)->where('cantidad_consumida', $det->cantidad)->delete();
+        if (in_array($det->estado, ['Dañado', 'Perdido'])) {
+            $rows = DB::table('incidente_items')->join('incidentes', 'incidente_items.incidente_id', '=', 'incidentes.id')
+                ->where('incidentes.prestamo_id', $pId)->where('incidente_items.item_id', $det->item_id)->where('incidente_items.cantidad', $det->cantidad)
+                ->select('incidente_items.id', 'incidente_items.incidente_id')->get();
+            foreach ($rows as $r) {
+                DB::table('incidente_items')->where('id', $r->id)->delete();
+                if (DB::table('incidente_items')->where('incidente_id', $r->incidente_id)->count() === 0) Incidente::where('id', $r->incidente_id)->delete();
             }
+        }
+    }
 
-            // ======================================
-            // 5) INHABILITAR KIT SI HUBO PROBLEMAS
-            // ======================================
-            if ($prestamo->kit && $kit_con_problemas) {
-                $prestamo->kit->update(['estado' => 'Inhabilitado']);
-            }
+    public function tienePendientes($pId)
+    {
+        $s = DB::table('detalle_prestamos')->where('prestamo_id', $pId)->get()->sum(fn($d) => max(0, $d->cantidad_prestada - DB::table('detalle_devoluciones as dd')->join('devoluciones as d', 'dd.devolucion_id', '=', 'd.id')->where('d.prestamo_id', $pId)->where('dd.item_id', $d->item_id)->where('dd.estado', '!=', 'Anulada')->sum('dd.cantidad')));
+        $k = DB::table('kit_prestamos as kp')->join('kit_emergencia_item as kei', 'kp.kit_id', '=', 'kei.kit_emergencia_id')->where('kp.prestamo_id', $pId)->get()->sum(fn($i) => max(0, $i->cantidad - DB::table('detalle_devoluciones_kit as ddk')->join('devoluciones as d', 'ddk.devolucion_id', '=', 'd.id')->where('d.prestamo_id', $pId)->where('ddk.kit_id', $i->kit_emergencia_id)->where('ddk.item_id', $i->item_id)->where('ddk.estado', '!=', 'Anulada')->sum('ddk.cantidad')));
+        return ($s + $k) > 0;
+    }
 
-            // ======================================
-            // 6) ACTUALIZAR ESTADO DEL PRÉSTAMO
-            // ======================================
-            if (empty($items_con_problemas)) {
-                $prestamo->estado = 'Completo';
-            } else {
-                $prestamo->estado = 'Observado';
-            }
+    private function actualizarEstadoItemAnulacion($item, $esKit = false)
+    {
+        if ($item->cantidad > 0) $item->update(['estado' => 'Disponible']);
+        else $item->update(['estado' => $this->existeItemEnCualquierPrestamo($item->id, 0) ? ($esKit ? 'En_Kit' : 'Prestado') : 'Pasivo']);
+    }
 
-            $prestamo->save();
+    public function existeItemEnCualquierPrestamo($itemId, $pId)
+    {
+        $s = DB::table('detalle_prestamos')->join('prestamos', 'detalle_prestamos.prestamo_id', '=', 'prestamos.id')->where('detalle_prestamos.item_id', $itemId)->where('prestamos.id', '!=', $pId)->whereIn('prestamos.estado', ['Activo', 'Observado'])->exists();
+        $k = DB::table('kit_prestamos')->join('prestamos', 'kit_prestamos.prestamo_id', '=', 'prestamos.id')->join('kit_emergencias', 'kit_prestamos.kit_id', '=', 'kit_emergencias.id')->join('kit_emergencia_item', 'kit_emergencias.id', '=', 'kit_emergencia_item.kit_emergencia_id')->where('kit_emergencia_item.item_id', $itemId)->where('prestamos.id', '!=', $pId)->whereIn('prestamos.estado', ['Activo', 'Observado'])->where('kit_emergencias.estado', 'Activo')->exists();
+        return $s || $k;
+    }
 
-        }); // transaction
+    public function darBajaItem($itemId, $pId)
+    {
+        $item = Item::find($itemId);
+        if (!$item || $item->estado === 'Pasivo') return;
+        $noRec = DB::table('detalle_devoluciones')->join('devoluciones', 'detalle_devoluciones.devolucion_id', '=', 'devoluciones.id')->where('devoluciones.prestamo_id', $pId)->where('detalle_devoluciones.item_id', $itemId)->whereIn('detalle_devoluciones.estado', ['Dañado', 'Perdido', 'Consumido'])->sum('detalle_devoluciones.cantidad');
+        $pre = DB::table('detalle_prestamos')->where('prestamo_id', $pId)->where('item_id', $itemId)->sum('cantidad_prestada');
+        if ($noRec == $pre && $item->cantidad == 0 && !$this->existeItemEnCualquierPrestamo($itemId, $pId)) $item->update(['estado' => 'Pasivo']);
+    }
 
-        return redirect()
-            ->route('prestamos.show', $prestamo)
-            ->with('status', 'Devolución procesada correctamente.');
+    public function darBajaItemKit($itemId, $prestamoId, $kitId, $okActual)
+    {
+        $item = Item::findOrFail($itemId);
+        $kit = KitEmergencia::findOrFail($kitId);
+        $totalOK = DB::table('detalle_devoluciones_kit')->join('devoluciones', 'detalle_devoluciones_kit.devolucion_id', '=', 'devoluciones.id')
+            ->where('devoluciones.prestamo_id', $prestamoId)->where('devoluciones.estado', '!=', 'Anulada')
+            ->where('detalle_devoluciones_kit.kit_id', $kitId)->where('detalle_devoluciones_kit.item_id', $itemId)
+            ->where('detalle_devoluciones_kit.estado', 'OK')->sum('detalle_devoluciones_kit.cantidad');
+
+        if ($totalOK <= 0) $kit->items()->updateExistingPivot($itemId, ['estado' => 'Pasivo']);
+        else $kit->items()->updateExistingPivot($itemId, ['estado' => 'Activo']);
+
+        $tienePasivos = DB::table('kit_emergencia_item')->where('kit_emergencia_id', $kitId)->where('estado', 'Pasivo')->exists();
+        $kit->update(['estado' => $tienePasivos ? 'Observado' : 'Activo']);
+
+        if ($item->cantidad <= 0 && !$this->existeItemEnCualquierPrestamo($itemId, $prestamoId)) $item->update(['estado' => 'Pasivo']);
+    }
+
+    public function registrarMovimientos($itemId, $cant, $acc, $tipo, $pId)
+    {
+        Movimiento::create(['item_id' => $itemId, 'accion' => $acc, 'tipo' => $tipo, 'cantidad' => $cant ?? 0, 'fecha' => now(), 'user_id' => auth()->id(), 'prestamo_id' => $pId]);
+    }
+
+    private function registrarDetalleDevolucion($dId, $iId, $t, $c, $kId)
+    {
+        if ($kId) DetalleDevolucionKit::create(['devolucion_id' => $dId, 'kit_id' => $kId, 'item_id' => $iId, 'estado' => $t, 'cantidad' => $c]);
+        else DetalleDevolucion::create(['devolucion_id' => $dId, 'item_id' => $iId, 'estado' => $t, 'cantidad' => $c]);
+    }
+
+    private function registrarIncidente($incId, $iId, $t, $c)
+    {
+        IncidenteItem::create(['incidente_id' => $incId, 'item_id' => $iId, 'estado_item' => $t, 'cantidad' => $c]);
+    }
+
+    private function registrarConsumo($itemId, $prestamoId, $cantidad)
+    {
+        $item = Item::findOrFail($itemId);
+        $prestamo = Prestamo::findOrFail($prestamoId);
+        return Consumo::create(['item_id' => $itemId, 'prestamo_id' => $prestamoId, 'cantidad_consumida' => $cantidad, 'precio_unitario' => $item->costo_unitario, 'proyecto_id' => $prestamo->proyecto_id, 'persona_id' => $prestamo->proyecto_id ? null : $prestamo->persona_id]);
+    }
+
+    /* ============================================================
+       IMPRIMIR RECIBO DE UNA DEVOLUCIÓN ESPECÍFICA
+       ============================================================ */
+    /* ============================================================
+   IMPRIMIR RECIBO DE UNA DEVOLUCIÓN ESPECÍFICA
+   ============================================================ */
+    public function imprimirRecibo(Devolucion $devolucion)
+    {
+        // CARGA ANSIOSA: Cargamos el préstamo y su persona asociada
+        $devolucion->load([
+            'prestamo.persona',
+            'prestamo.proyecto',
+            'detalles.item',
+            'detallesKit.item',
+            'user'
+        ]);
+        
+
+        $logoPath = public_path('vendor/adminlte/dist/img/logoSer_Gen2.jpg');
+        $logoBase64 = file_exists($logoPath)
+            ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
+            : null;
+
+        return Pdf::loadView('devoluciones.recibo_devolucion', [
+            'registro'   => $devolucion, // Se pasa como 'registro' para la vista
+            'titulo'     => 'Recibo de Devolución #' . $devolucion->id,
+            'logoBase64' => $logoBase64,
+        ])->setPaper('a4')->stream("recibo_devolucion_{$devolucion->id}.pdf");
+    }
+
+    /* ============================================================
+       IMPRIMIR HISTORIAL COMPLETO DE DEVOLUCIONES DE UN PRÉSTAMO
+       ============================================================ */
+    public function imprimirHistorial(Prestamo $prestamo)
+    {
+        $prestamo->load([
+            'persona',
+            'proyecto',
+            'devoluciones' => fn($q) => $q->where('estado', '!=', 'Anulada')->orderBy('fecha', 'desc'),
+            'devoluciones.detalles.item',
+            'devoluciones.detallesKit.item',
+            'devoluciones.detallesKit.kit',
+            'devoluciones.user'
+        ]);
+
+        $logoPath = public_path('vendor/adminlte/dist/img/logoSer_Gen2.jpg');
+        $logoBase64 = file_exists($logoPath)
+            ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath))
+            : null;
+
+        $pdf = Pdf::loadView('devoluciones.historial_devoluciones', [
+            'prestamo' => $prestamo,
+            'titulo' => 'Historial de Devoluciones - Préstamo ' . $prestamo->codigo,
+            'logoBase64' => $logoBase64,
+        ])->setPaper('a4');
+
+        // En el controlador para historial
+        return Pdf::loadView('devoluciones.historial_devoluciones', [
+            'prestamo'   => $prestamo, // La vista debe usar $prestamo->codigo, etc.
+            'titulo'     => 'Historial de Devoluciones - Préstamo ' . $prestamo->codigo,
+            'logoBase64' => $logoBase64,
+        ])->setPaper('a4')->stream("historial_devoluciones_{$prestamo->codigo}.pdf");
     }
 }

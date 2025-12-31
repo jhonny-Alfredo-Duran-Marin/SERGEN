@@ -22,10 +22,8 @@ return new class extends Migration
                 'NO_RECUPERADO',
                 'REPARABLE'
             ]);
-
-            $table->boolean('aceptado')->default(true);
+            $table->enum('tipo', ['Perdido', 'Dañado']);
             $table->text('observacion')->nullable();
-            $table->boolean('impreso')->default(false);
 
             $table->timestamps();
         });

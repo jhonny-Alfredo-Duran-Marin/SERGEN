@@ -14,14 +14,12 @@ return new class extends Migration
         Schema::create('prestamos', function (Blueprint $table) {
             $table->id();
             $table->string('codigo', 50)->unique();
-            $table->date('fecha')->default(now());
+            $table->datetime('fecha')->default(now());
             $table->enum('estado', ['Activo', 'Observado', 'Completo'])->default('Activo')->index();
-            $table->enum('tipo_destino', ['Persona', 'Proyecto', 'Otro'])->default('Persona');
-
+            $table->enum('tipo_destino', ['Persona', 'Proyecto'])->default('Persona');
             $table->foreignId('persona_id')->nullable()->constrained('personas')->nullOnDelete();
             $table->foreignId('proyecto_id')->nullable()->constrained('proyectos')->nullOnDelete();
-            $table->foreignId('kit_emergencia_id')->nullable()->constrained('kit_emergencias')->nullOnDelete();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete(); // quien registra
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
 
             $table->text('nota')->nullable();
 

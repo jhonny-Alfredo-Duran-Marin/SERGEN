@@ -16,7 +16,6 @@ return new class extends Migration
             $table->foreignId('persona_id')->constrained('personas')->cascadeOnDelete();
             $table->date('fecha');
             $table->text('nota')->nullable();
-            $table->boolean('impreso')->default(false);
             $table->enum('estado_final', [
                 'ABIERTA',
                 'DEVUELTA',

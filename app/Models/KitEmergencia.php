@@ -29,6 +29,12 @@ class KitEmergencia extends Model
             ->withPivot(['cantidad'])
             ->withTimestamps();
     }
+    public function items_kit()
+    {
+        // Esta es la relación que realmente contiene los productos
+        return $this->belongsToMany(Item::class, 'kit_emergencia_item', 'kit_emergencia_id', 'item_id')
+            ->withPivot('cantidad');
+    }
 
     // Autogenera 'codigo' antes de insertar (KIT-0001, KIT-0002, ...)
 

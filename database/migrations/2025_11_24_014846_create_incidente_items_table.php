@@ -12,21 +12,16 @@ return new class extends Migration
 
             $table->id();
             $table->foreignId('incidente_id')->constrained('incidentes')->cascadeOnDelete();
-            $table->foreignId('item_id')->constrained('items')->cascadeOnDelete();
-            $table->foreignId('prestamo_id')->nullable()->constrained('prestamos')->nullOnDelete();
-            $table->foreignId('dotacion_id')->nullable()->constrained('dotacions')->nullOnDelete();
-
+            $table->foreignId('item_id')->constrained('items')->restrictOnDelete();
             $table->enum('estado_item', [
                 'PERDIDO',
-                'DANADO',
-                'NO_DEVUELTO',
+                'DAÑADO',
+                'FALTANTE',
                 'BAJA',
                 'OTRO'
             ]);
 
-            $table->integer('cantidad')->default(1);
-            $table->text('observacion')->nullable();
-
+            $table->integer('cantidad')->default(0);
             $table->timestamps();
         });
     }

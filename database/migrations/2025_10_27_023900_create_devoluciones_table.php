@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('devoluciones', function (Blueprint $table) {
             $table->id();
             $table->foreignId('prestamo_id')->constrained('prestamos')->cascadeOnDelete();
-            $table->enum('estado', ['Pendiente', 'Parcial', 'Completa'])->default('Pendiente');
+            $table->enum('estado', ['Pendiente', 'Parcial', 'Completa', 'Anulada'])->default('Pendiente');
             $table->timestamp('fecha')->useCurrent();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->text('nota')->nullable();
@@ -25,7 +25,17 @@ return new class extends Migration
             $table->id();
             $table->foreignId('devolucion_id')->constrained('devoluciones')->cascadeOnDelete();
             $table->foreignId('item_id')->constrained('items')->restrictOnDelete();
-            $table->unsignedInteger('cantidad'); // devuelta en ESTA devolución
+            $table->enum('estado', ['OK', 'Dañado', 'Consumido', 'Perdido','Anulada'])->default('OK');
+            $table->unsignedInteger('cantidad');
+            $table->timestamps();
+        });
+        Schema::create('detalle_devoluciones_kit', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('devolucion_id')->constrained('devoluciones')->cascadeOnDelete();
+            $table->foreignId('kit_id')->constrained('kit_emergencias')->cascadeOnDelete();
+            $table->foreignId('item_id')->constrained('items')->restrictOnDelete();
+            $table->enum('estado', ['OK', 'Dañado', 'Consumido', 'Perdido','Anulada'])->default('OK');
+            $table->unsignedInteger('cantidad');
             $table->timestamps();
         });
     }
@@ -37,6 +47,7 @@ return new class extends Migration
     {
 
         Schema::dropIfExists('detalle_devoluciones');
+        Schema::dropIfExists('detalle_devoluciones_kit');
         Schema::dropIfExists('devoluciones');
     }
 };

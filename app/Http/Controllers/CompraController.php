@@ -54,40 +54,47 @@ class CompraController extends Controller
 
     public function store(Request $request)
     {
+        // 1. Validaciones incluyendo el nuevo campo QR
         $data = $request->validate([
             'fecha_compra' => ['required', 'date'],
             'descripcion'  => ['required', 'string', 'max:255'],
             'costo_total'  => ['required', 'numeric', 'min:0'],
             'cantidad'     => ['required', 'integer', 'min:1'],
-            'tipo_compra'  => ['required', Rule::in(['Herramienta', 'Material', 'Insumos', 'Otros'])],
-            'imagen'       => ['nullable', 'image', 'max:2048'],
+            'tipo_compra'  => ['required', \Illuminate\Validation\Rule::in(['Herramienta', 'Material', 'Insumos', 'Otros'])],
+            'imagen'       => ['nullable', 'image', 'max:2048'], // Foto del recibo
+            'qr'           => ['nullable', 'image', 'max:1024'], // Foto del QR
         ]);
 
-        // Estado automático
+        // 2. Lógica de estado automático
         $data['estado_procesamiento'] = in_array($data['tipo_compra'], ['Herramienta', 'Material'])
             ? 'Pendiente'
             : 'Resuelto';
 
         $data['user_id'] = auth()->id();
 
-        // Subir imagen
+        // 3. Procesamiento de archivos (Imagen y QR)
         if ($request->hasFile('imagen')) {
             $data['imagen'] = $request->file('imagen')->store('compras', 'public');
         }
 
+        if ($request->hasFile('qr')) {
+            $data['qr'] = $request->file('qr')->store('qrs', 'public');
+        }
+
+        // 4. Crear la compra en la base de datos
         $compra = Compra::create($data);
 
-        // Registrar movimiento
-        Movimiento::create([
+        // 5. Registrar el movimiento para auditoría
+        \App\Models\Movimiento::create([
             'item_id' => null,
             'accion' => 'CREAR_COMPRA',
             'cantidad' => $compra->cantidad,
             'fecha' => now(),
             'user_id' => auth()->id(),
-            'nota' => 'Compra registrada: ' . $compra->descripcion,
+            'nota' => 'Compra registrada con QR opcional: ' . $compra->descripcion,
         ]);
 
-        return redirect()->route('compras.index')->with('status', 'Compra registrada.');
+        return redirect()->route('compras.index')->with('status', 'Compra registrada con éxito.');
     }
 
     public function edit(Compra $compra)
@@ -105,9 +112,10 @@ class CompraController extends Controller
             'tipo_compra'  => ['required', Rule::in(['Herramienta', 'Material', 'Insumos', 'Otros'])],
             'estado_procesamiento' => ['required', Rule::in(['Pendiente', 'Resuelto'])],
             'imagen'       => ['nullable', 'image', 'max:2048'],
+            'qr'           => ['nullable', 'image', 'max:1024'],
         ]);
 
-        // Si hay imagen nueva
+        // Gestión de imagen principal
         if ($request->hasFile('imagen')) {
             if ($compra->imagen) {
                 Storage::disk('public')->delete($compra->imagen);
@@ -115,15 +123,26 @@ class CompraController extends Controller
             $data['imagen'] = $request->file('imagen')->store('compras', 'public');
         }
 
+        // Gestión de QR
+        if ($request->hasFile('qr')) {
+            if ($compra->qr) {
+                Storage::disk('public')->delete($compra->qr);
+            }
+            $data['qr'] = $request->file('qr')->store('qrs', 'public');
+        }
+
         $compra->update($data);
 
+        // IMPORTANTE: Solo registrar si item_id puede ser nulo en tu BD
+        // He agregado 'tipo' => 'Modificacion' porque es obligatorio en tu migración
         Movimiento::create([
-            'item_id' => null,
-            'accion' => 'EDITAR_COMPRA',
+            'item_id'  => null, // Esto fallará hasta que corrijas la migración
+            'accion'   => 'EDITAR_COMPRA',
+            'tipo'     => 'Modificacion',
             'cantidad' => $compra->cantidad,
-            'fecha' => now(),
-            'user_id' => auth()->id(),
-            'nota' => 'Compra actualizada: ' . $compra->descripcion,
+            'fecha'    => now(),
+            'user_id'  => auth()->id(),
+            'nota'     => 'Compra actualizada: ' . $compra->descripcion,
         ]);
 
         return redirect()->route('compras.index')->with('status', 'Compra actualizada.');

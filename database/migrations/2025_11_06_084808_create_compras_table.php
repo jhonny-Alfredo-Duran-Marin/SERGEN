@@ -16,6 +16,7 @@ return new class extends Migration
             $table->date('fecha_compra'); // Para el control por día
             $table->string('descripcion');
             $table->string('imagen');
+              $table->string('qr')->nullable();
             $table->decimal('costo_total', 10, 2);
             $table->integer('cantidad')->default(1);
             $table->enum('tipo_compra', ['Herramienta', 'Material', 'Insumos', 'Otros'])->default('Material');

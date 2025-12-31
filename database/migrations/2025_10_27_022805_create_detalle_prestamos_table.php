@@ -15,14 +15,9 @@ return new class extends Migration
             $table->id();
             $table->foreignId('prestamo_id')->constrained('prestamos')->cascadeOnDelete();
             $table->foreignId('item_id')->constrained('items')->restrictOnDelete();
-
-            $table->unsignedInteger('cantidad_prestada');
-            $table->unsignedInteger('cantidad_devuelta')->default(0);
-            $table->decimal('costo_unitario', 12, 2)->default(0);
-            $table->decimal('subtotal', 12, 2)->default(0);
-
+            $table->unsignedInteger('cantidad_prestada'); 
             $table->timestamps();
-            $table->unique(['prestamo_id', 'item_id']); // 1 línea por item
+            $table->unique(['prestamo_id', 'item_id']);
         });
     }
 

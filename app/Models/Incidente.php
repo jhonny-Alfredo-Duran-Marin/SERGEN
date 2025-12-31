@@ -12,35 +12,52 @@ class Incidente extends Model
         'estado',
         'persona_id',
         'fecha_incidente',
-        'descripcion'
+        'descripcion',
+        'prestamo_id',
+        'dotacion_id',
     ];
 
-    public function persona()
+    /* =========================
+       RELACIONES
+    ========================= */
+
+    public function prestamo()
     {
-        return $this->belongsTo(Persona::class);
+        return $this->belongsTo(Prestamo::class);
     }
 
+    public function dotacion()
+    {
+        return $this->belongsTo(Dotacion::class);
+    }
+
+
+
+
+    /* =========================
+       HELPERS
+    ========================= */
+
+    public static function generarCodigo(): string
+    {
+        $next = (self::max('id') ?? 0) + 1;
+        return 'INC-' . str_pad($next, 4, '0', STR_PAD_LEFT);
+    }
     public function items()
     {
         return $this->belongsToMany(Item::class, 'incidente_items')
-            ->withPivot([
-                'prestamo_id',
-                'dotacion_id',
-                'estado_item',
-                'cantidad',
-                'observacion'
-            ])
+            ->withPivot('id', 'cantidad', 'estado_item') // Incluimos el 'id' del pivote
             ->withTimestamps();
     }
 
     public function devoluciones()
     {
+        // Relación con la tabla 'incidente_devolucions'
         return $this->hasMany(IncidenteDevolucion::class, 'incident_id');
     }
 
-    public static function generarCodigo()
+    public function persona()
     {
-        $next = self::max('id') + 1;
-        return 'INC-' . str_pad($next, 4, '0', STR_PAD_LEFT);
+        return $this->belongsTo(Persona::class);
     }
 }

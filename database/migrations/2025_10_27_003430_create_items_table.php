@@ -27,8 +27,8 @@ return new class extends Migration
 
             $table->decimal('costo_unitario', 12, 2)->default(0);
             $table->decimal('descuento', 12, 2)->default(0);
-            $table->enum('estado', ['Activo', 'Pasivo','Disponible','Prestado','Dotado','Observacion','Baja'])->default('Activo')->index();
-            $table->enum('tipo', ['Herramienta', 'Material'])->default('Material')->index();
+            $table->enum('estado', ['Activo', 'Pasivo','Disponible','Prestado','Dotado','Observacion','Baja','En_Kit'])->default('Activo')->index();
+            $table->enum('tipo', ['Herramienta', 'Material', 'Dotacion'])->default('Material')->index();
 
             $table->string('ubicacion', 250)->nullable();
             $table->timestamp('fecha_registro')->useCurrent();

@@ -2,12 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Incidente;
-use App\Models\IncidenteDevolucion;
-use App\Models\Item;
-use App\Models\Prestamo;
-use App\Models\Dotacion;
-use App\Models\Persona;
+use App\Models\{Incidente, IncidenteDevolucion, Item, Movimiento, Prestamo};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -16,198 +11,11 @@ class IncidenteController extends Controller
 {
     public function index()
     {
-        $query = Incidente::with('persona');
+        // Cargamos la relación 'persona' para toda la colección de una vez
+        $incidentes = Incidente::with('persona')->orderByDesc('created_at')->paginate(20);
 
-        // Calcular estadísticas ANTES de paginar
-        $total = $query->count();
-        $activos = (clone $query)->where('estado', 'ACTIVO')->count();
-        $enProceso = (clone $query)->where('estado', 'EN_PROCESO')->count();
-        $completados = (clone $query)->where('estado', 'COMPLETADO')->count();
-
-        // Paginar
-        $incidentes = $query->orderByDesc('fecha_incidente')->paginate(20);
-
-        return view('incidentes.index', compact(
-            'incidentes',
-            'total',
-            'activos',
-            'enProceso',
-            'completados'
-        ));
+        return view('incidentes.index', compact('incidentes'));
     }
-
-    public function create()
-    {
-        $personas = Persona::withoutTrashed()
-            ->where('estado', 1)
-            ->orderBy('nombre')
-            ->get(['id', 'nombre']);
-
-        $items = Item::orderBy('descripcion')->get();
-
-        $prestamos = Prestamo::with('persona')->get();
-        $dotaciones = Dotacion::with('persona')->get();
-
-        return view('incidentes.create', compact('personas', 'items', 'prestamos', 'dotaciones'));
-    }
-
-
-    public function store(Request $request)
-    {
-        $data = $request->validate([
-            'tipo'            => 'required|in:PRESTAMO,DOTACION',
-            'persona_id'      => 'required|exists:personas,id',
-            'relacion_id'     => 'nullable|integer',
-            'fecha_incidente' => 'required|date',
-            'descripcion'     => 'nullable|string',
-
-            'items'                 => 'required|array|min:1',
-            'items.*.item_id'       => 'required|exists:items,id',
-            'items.*.cantidad'      => 'required|integer|min:1',
-            'items.*.estado_item'   => 'required',
-            'items.*.observacion'   => 'nullable|string'
-        ]);
-
-        DB::transaction(function () use ($data) {
-
-            $incidente = Incidente::create([
-                'codigo'          => Incidente::generarCodigo(),
-                'tipo'            => $data['tipo'],
-                'estado'          => 'ACTIVO',
-                'persona_id'      => $data['persona_id'],
-                'fecha_incidente' => $data['fecha_incidente'],
-                'descripcion'     => $data['descripcion'],
-            ]);
-
-            foreach ($data['items'] as $it) {
-                $incidente->items()->attach($it['item_id'], [
-                    'cantidad'      => $it['cantidad'],
-                    'estado_item'   => $it['estado_item'],
-                    'observacion'   => $it['observacion'] ?? null,
-                    'prestamo_id'   => $data['tipo'] === 'PRESTAMO' ? $data['relacion_id'] : null,
-                    'dotacion_id'   => $data['tipo'] === 'DOTACION' ? $data['relacion_id'] : null,
-                ]);
-            }
-        });
-
-        return redirect()->route('incidentes.index')->with('status', 'Incidente registrado.');
-    }
-
-    public function edit(Incidente $incidente)
-    {
-        $incidente->load('items');
-
-        return view('incidentes.edit', [
-            'incidente'  => $incidente,
-            'personas'   => Persona::orderBy('nombre')->get(),
-            'prestamos'  => Prestamo::orderBy('id', 'desc')->get(),
-            'dotaciones' => Dotacion::orderBy('id', 'desc')->get(),
-            'items'      => Item::orderBy('descripcion')->get()
-        ]);
-    }
-
-    public function update(Request $request, Incidente $incidente)
-    {
-        $data = $request->validate([
-            'tipo'            => 'required|in:PRESTAMO,DOTACION',
-            'persona_id'      => 'required|exists:personas,id',
-            'relacion_id'     => 'nullable|integer',
-            'fecha_incidente' => 'required|date',
-            'descripcion'     => 'nullable|string',
-
-            'items'               => 'required|array|min:1',
-            'items.*.item_id'     => 'required|exists:items,id',
-            'items.*.cantidad'    => 'required|integer|min:1',
-            'items.*.estado_item' => 'required',
-            'items.*.observacion' => 'nullable|string'
-        ]);
-
-        DB::transaction(function () use ($data, $incidente) {
-
-            $incidente->update([
-                'tipo'            => $data['tipo'],
-                'persona_id'      => $data['persona_id'],
-                'fecha_incidente' => $data['fecha_incidente'],
-                'descripcion'     => $data['descripcion'],
-            ]);
-
-            $incidente->items()->detach();
-
-            foreach ($data['items'] as $it) {
-                $incidente->items()->attach($it['item_id'], [
-                    'cantidad'      => $it['cantidad'],
-                    'estado_item'   => $it['estado_item'],
-                    'observacion'   => $it['observacion'] ?? null,
-                    'prestamo_id'   => $data['tipo'] === 'PRESTAMO' ? $data['relacion_id'] : null,
-                    'dotacion_id'   => $data['tipo'] === 'DOTACION' ? $data['relacion_id'] : null,
-                ]);
-            }
-        });
-
-        return redirect()->route('incidentes.index')->with('status', 'Incidente actualizado.');
-    }
-
-    public function devolverForm(Incidente $incidente)
-    {
-        $incidente->load('items');
-        return view('incidentes.devolver', compact('incidente'));
-    }
-
-    public function registrarDevolucion(Request $request, Incidente $incidente)
-    {
-        $data = $request->validate([
-            'items'                      => 'required|array',
-            'items.*.item_id'            => 'required|exists:items,id',
-            'items.*.devolver'           => 'nullable|boolean',
-            'items.*.cantidad_devuelta'  => 'nullable|integer|min:1',
-            'items.*.resultado'          => 'nullable|in:DEVUELTO_OK,DEVUELTO_DANADO,NO_RECUPERADO,REPARABLE',
-            'items.*.observacion'        => 'nullable|string'
-        ]);
-
-        DB::transaction(function () use ($data, $incidente) {
-
-            foreach ($data['items'] as $row) {
-
-                // si no marcó devolver → ignorar
-                if (empty($row['devolver'])) continue;
-
-                // validar cantidad máxima permitida
-                $pivot = $incidente->items()->where('item_id', $row['item_id'])->first();
-
-                if ($row['cantidad_devuelta'] > $pivot->pivot->cantidad) {
-                    throw new \Exception("No puede devolver más de lo afectado.");
-                }
-
-                // registrar devolución
-                IncidenteDevolucion::create([
-                    'incident_id'       => $incidente->id,
-                    'item_id'           => $row['item_id'],
-                    'cantidad_devuelta' => $row['cantidad_devuelta'],
-                    'resultado'         => $row['resultado'],
-                    'aceptado'          => true,
-                    'observacion'       => $row['observacion'],
-                ]);
-
-                // si devuelve OK, se suma al stock
-                if ($row['resultado'] === 'DEVUELTO_OK') {
-                    Item::find($row['item_id'])->increment('cantidad', $row['cantidad_devuelta']);
-                }
-            }
-
-            // actualizar estado del incidente
-            $total = $incidente->items()->sum('incidente_items.cantidad');
-            $devueltos = IncidenteDevolucion::where('incident_id', $incidente->id)
-                ->sum('cantidad_devuelta');
-
-            if ($devueltos >= $total) {
-                $incidente->update(['estado' => 'COMPLETADO']);
-            }
-        });
-
-        return redirect()->route('incidentes.show', $incidente)
-            ->with('status', 'Devolución registrada correctamente.');
-    }
-
 
     public function show(Incidente $incidente)
     {
@@ -215,22 +23,93 @@ class IncidenteController extends Controller
         return view('incidentes.show', compact('incidente'));
     }
 
-    public function recibo(IncidenteDevolucion $devolucion)
+    public function registrarDevolucion(Request $request, Incidente $incidente)
     {
-        $devolucion->load(['item', 'incidente.persona']);
+        $request->validate(['items' => 'required|array']);
 
-        $pdf = Pdf::loadView('incidentes.recibo', [
-            'devolucion' => $devolucion
-        ])->setPaper('A5', 'portrait');
+        try {
+            DB::transaction(function () use ($request, $incidente) {
+                foreach ($request->items as $row) {
+                    $cant = (int)($row['cantidad_devuelta'] ?? 0);
+                    if ($cant <= 0) continue;
 
-        $devolucion->update(['impreso' => true]);
+                    IncidenteDevolucion::create([
+                        'incident_id'       => $incidente->id,
+                        'item_id'           => $row['item_id'],
+                        'cantidad_devuelta' => $cant,
+                        'resultado'         => $row['resultado'],
+                        'tipo'              => $row['tipo'],
+                        'observacion'       => $row['observacion'] ?? null,
+                    ]);
 
-        return $pdf->stream('recibo-' . $devolucion->id . '.pdf');
+                    if ($row['resultado'] === 'DEVUELTO_OK') {
+                        Item::where('id', $row['item_id'])->increment('cantidad', $cant);
+                    }
+                }
+
+                $this->actualizarEstadoIncidente($incidente);
+
+                // Sincronización con Préstamo
+                if ($incidente->estado === 'COMPLETADO' && $incidente->prestamo) {
+                    $incidente->prestamo->verificarYCompletarEstado();
+                }
+            });
+
+            return redirect()->route('incidentes.show', $incidente)->with('status', 'Devoluciones procesadas.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
     }
 
-    public function destroy(Incidente $incidente)
+    public function completar(Incidente $incidente)
     {
-        $incidente->delete();
-        return back()->with('status', 'Incidente eliminado.');
+        DB::transaction(function () use ($incidente) {
+            $incidente->update(['estado' => 'COMPLETADO']);
+
+            if ($incidente->prestamo) {
+                $incidente->prestamo->verificarYCompletarEstado();
+            }
+        });
+
+        return back()->with('status', 'Incidente y Préstamo verificados.');
+    }
+
+    private function actualizarEstadoIncidente(Incidente $incidente)
+    {
+        $totalAfectado = DB::table('incidente_items')->where('incidente_id', $incidente->id)->sum('cantidad');
+        $totalDevuelto = IncidenteDevolucion::where('incident_id', $incidente->id)->sum('cantidad_devuelta');
+
+        if ($totalDevuelto >= $totalAfectado) {
+            $incidente->update(['estado' => 'COMPLETADO']);
+        } elseif ($totalDevuelto > 0) {
+            $incidente->update(['estado' => 'EN_PROCESO']);
+        }
+    }
+
+    /**
+     * HISTORIAL DE INCIDENTE (Basado en formato de Préstamos)
+     */
+    public function recibo($id) // Cambiamos a $id para asegurar la búsqueda
+    {
+        // 1. Buscamos el incidente y cargamos TODAS las relaciones de golpe
+        $incidente = Incidente::with(['persona', 'items', 'devoluciones.item', 'prestamo.proyecto'])
+            ->findOrFail($id);
+
+        // 2. Verificación de seguridad antes de generar el PDF
+        if (!$incidente->persona) {
+            return back()->withErrors(['error' => 'No se encontró la persona asociada a este incidente.']);
+        }
+
+        $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('vendor/adminlte/dist/img/logoSer_Gen2.jpg')));
+
+        $data = [
+            'incidente'  => $incidente,
+            'titulo'     => 'HISTORIAL DE DEVOLUCIONES - INCIDENTE',
+            'logoBase64' => $logoBase64
+        ];
+
+        return Pdf::loadView('incidentes.historial_pdf', $data)
+            ->setPaper('a4')
+            ->stream("Historial_INC_{$incidente->codigo}.pdf");
     }
 }

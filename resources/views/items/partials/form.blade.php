@@ -301,6 +301,25 @@
                         <option value="Activo" @selected(old('estado', $item->estado ?? 'Activo') === 'Activo')>
                             Activo
                         </option>
+
+                        <option value="Disponible" @selected(old('estado', $item->estado ?? 'Disponible') === 'Disponible')>
+                            Disponible
+                        </option>
+                        <option value="Prestado" @selected(old('estado', $item->estado ?? 'Prestado') === 'Prestado')>
+                            Prestado
+                        </option>
+                        <option value="Dotado" @selected(old('estado', $item->estado ?? 'Dotado') === 'Dotado')>
+                            Dotado
+                        </option>
+                        <option value="Observacion" @selected(old('estado', $item->estado ?? 'Observacion') === 'Observacion')>
+                            Observacion
+                        </option>
+                         <option value="Reservado" @selected(old('estado', $item->estado ?? 'Reservado') === 'Reservado')>
+                            Reservado
+                        </option>
+                        <option value="Baja" @selected(old('estado', $item->estado ?? 'Baja') === 'Baja')>
+                            Baja
+                        </option>
                         <option value="Pasivo" @selected(old('estado', $item->estado ?? '') === 'Pasivo')>
                             Pasivo
                         </option>

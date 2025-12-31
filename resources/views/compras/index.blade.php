@@ -150,6 +150,13 @@
                             </td>
                             <td>{{ $compra->user->name ?? '—' }}</td>
                             <td class="text-nowrap">
+                                {{-- 1. Botón Ver (Fuera del modal para acceso directo) --}}
+                                <a href="{{ route('compras.show', $compra) }}" class="btn btn-xs btn-info"
+                                    title="Ver Detalle">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+
+                                {{-- 2. Botón Editar --}}
                                 @can('compras.update')
                                     <a href="{{ route('compras.edit', $compra) }}" class="btn btn-xs btn-warning"
                                         title="Editar">
@@ -157,6 +164,7 @@
                                     </a>
                                 @endcan
 
+                                {{-- 3. Botón y Modal de Eliminar --}}
                                 @can('compras.delete')
                                     @php $delId = 'delCompra'.$compra->id; @endphp
                                     <button class="btn btn-xs btn-danger" data-toggle="modal"
@@ -164,7 +172,6 @@
                                         <i class="fas fa-trash"></i>
                                     </button>
 
-                                    {{-- Modal + FIX: botón del footer envía el form por id --}}
                                     <x-adminlte-modal id="{{ $delId }}" title="Confirmar Eliminación" theme="danger"
                                         icon="fas fa-trash">
                                         <p>¿Estás seguro de eliminar esta compra?</p>
@@ -185,11 +192,6 @@
                                                 Cancelar
                                             </button>
                                         </x-slot>
-                                        <a href="{{ route('compras.show', $compra) }}" class="btn btn-xs btn-info"
-                                            title="Ver">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-
                                     </x-adminlte-modal>
                                 @endcan
                             </td>
