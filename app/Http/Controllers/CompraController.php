@@ -11,6 +11,14 @@ use Illuminate\Support\Facades\Storage;
 
 class CompraController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(['permission:compras.view'])->only(['index', 'show']);
+        $this->middleware(['permission:compras.create'])->only(['create', 'store', 'solicitar']);
+        $this->middleware(['permission:compras.update'])->only(['edit', 'update']);
+        $this->middleware(['permission:compras.delete'])->only(['destroy']);
+        $this->middleware(['permission:compras.resolver'])->only(['resolver']);
+    }
     public function index(Request $request)
     {
         $q = $request->string('q')->toString();

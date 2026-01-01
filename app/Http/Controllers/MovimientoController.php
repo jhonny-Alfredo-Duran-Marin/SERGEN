@@ -8,6 +8,10 @@ use Illuminate\Http\Request;
 
 class MovimientoController extends Controller
 {
+    public function __construct()
+    {
+       $this->middleware(['permission:movimientos.view']);
+    }
     public function index(Request $request)
     {
         // ESTADÍSTICAS DEL DÍA

@@ -9,6 +9,15 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class IncidenteController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(['permission:incidentes.view'])->only(['index', 'show', 'recibo']);
+        $this->middleware(['permission:incidentes.create'])->only(['create', 'store']);
+        $this->middleware(['permission:incidentes.update'])->only(['edit', 'update']);
+        $this->middleware(['permission:incidentes.delete'])->only(['destroy']);
+        $this->middleware(['permission:incidentes.devolver'])->only(['devolverForm', 'registrarDevolucion']);
+        $this->middleware(['permission:incidentes.completar'])->only(['completar']);
+    }
     public function index()
     {
         // Cargamos la relación 'persona' para toda la colección de una vez
@@ -22,42 +31,75 @@ class IncidenteController extends Controller
         $incidente->load(['persona', 'items', 'devoluciones.item']);
         return view('incidentes.show', compact('incidente'));
     }
+    public function devolverForm(Incidente $incidente)
+    {
+        $incidente->load(['persona', 'items', 'devoluciones']);
+
+        $incidente->items->each(function ($it) use ($incidente) {
+            $yaDevuelto = $incidente->devoluciones
+                ->where('item_id', $it->id)
+                ->sum('cantidad_devuelta');
+
+            // Calculamos el pendiente real basándonos en el pivote 'cantidad'
+            $it->pendiente_real = max(0, $it->pivot->cantidad - $yaDevuelto);
+
+            // Mapeamos el tipo para que coincida con el ENUM de la BD ('Dañado' o 'Perdido')
+            $it->tipo_mapeado = ($it->pivot->estado_item == 'DAÑADO') ? 'Dañado' : 'Perdido';
+        });
+
+        return view('incidentes.devolver', compact('incidente'));
+    }
 
     public function registrarDevolucion(Request $request, Incidente $incidente)
     {
-        $request->validate(['items' => 'required|array']);
+        $request->validate([
+            'items' => 'required|array',
+            'items.*.item_id' => 'required|exists:items,id',
+            'items.*.cantidad_devuelta' => 'required|integer|min:0',
+            'items.*.resultado' => 'required|in:DEVUELTO_OK,DEVUELTO_DANADO,NO_RECUPERADO,REPARABLE'
+        ]);
 
         try {
             DB::transaction(function () use ($request, $incidente) {
                 foreach ($request->items as $row) {
-                    $cant = (int)($row['cantidad_devuelta'] ?? 0);
+                    $cant = (int)$row['cantidad_devuelta'];
                     if ($cant <= 0) continue;
 
+                    // Registro con valores exactos del ENUM de tu migración
                     IncidenteDevolucion::create([
                         'incident_id'       => $incidente->id,
                         'item_id'           => $row['item_id'],
                         'cantidad_devuelta' => $cant,
                         'resultado'         => $row['resultado'],
-                        'tipo'              => $row['tipo'],
+                        'tipo'              => $row['tipo'], // Viene mapeado desde la vista como 'Dañado' o 'Perdido'
                         'observacion'       => $row['observacion'] ?? null,
                     ]);
 
                     if ($row['resultado'] === 'DEVUELTO_OK') {
                         Item::where('id', $row['item_id'])->increment('cantidad', $cant);
+
+                        // Registrar Movimiento para auditoría
+                        Movimiento::create([
+                            'item_id' => $row['item_id'],
+                            'tipo' => 'Ingreso',
+                            'accion' => 'Reposición Incidente ' . $incidente->codigo,
+                            'cantidad' => $cant,
+                            'user_id' => auth()->id(),
+                            'fecha' => now(),
+                        ]);
                     }
                 }
 
                 $this->actualizarEstadoIncidente($incidente);
 
-                // Sincronización con Préstamo
-                if ($incidente->estado === 'COMPLETADO' && $incidente->prestamo) {
+                if ($incidente->prestamo) {
                     $incidente->prestamo->verificarYCompletarEstado();
                 }
             });
 
-            return redirect()->route('incidentes.show', $incidente)->with('status', 'Devoluciones procesadas.');
+            return redirect()->route('incidentes.show', $incidente)->with('status', 'Devolución registrada con éxito.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => 'Error de Base de Datos: ' . $e->getMessage()]);
         }
     }
 

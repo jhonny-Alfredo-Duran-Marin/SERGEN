@@ -57,7 +57,7 @@ class SuperDemoSeeder extends Seeder
         $this->command->warn('  - Personas/Usuarios…');
 
         // SuperAdmin desde .env
-        $saName  = env('SUPERADMIN_NAME', 'Super Admin');
+        $saName  = env('SUPERADMIN_NAME', default: 'Super Admin');
         $saEmail = env('SUPERADMIN_EMAIL', 'superadmin@example.com');
         $saPass  = env('SUPERADMIN_PASSWORD', '123456789');
 

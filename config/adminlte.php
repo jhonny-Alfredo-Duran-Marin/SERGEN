@@ -462,14 +462,14 @@ return [
             'text'   => 'Control de Consumos', // NUEVO MÓDULO AGREGADO
             'route'  => 'consumos.index',
             'icon'   => 'fas fa-chart-pie',
-           // 'can'    => 'consumos.view',
+            'can'    => 'consumos.view',
             'active' => ['consumos', 'consumos/*'],
         ],
         [
             'text'   => 'Incidentes',
             'route'  => 'incidentes.index',
             'icon'   => 'fas fa-exclamation-triangle',
-           // 'can'    => 'incidentes.view',
+            'can'    => 'incidentes.view',
             'active' => ['incidentes', 'incidentes/*'],
         ],
         [

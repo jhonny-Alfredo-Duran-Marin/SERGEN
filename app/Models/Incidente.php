@@ -60,4 +60,5 @@ class Incidente extends Model
     {
         return $this->belongsTo(Persona::class);
     }
+    
 }

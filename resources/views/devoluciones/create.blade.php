@@ -38,7 +38,7 @@
                     <td class="text-success">{{ $data['devuelto'] }}</td>
                     <td class="text-danger font-weight-bold">{{ $data['pendiente'] }}</td>
 
-                    @foreach (['ok','danado','perdido','consumido'] as $estado)
+                    @foreach (['ok','dañado','perdido','consumido'] as $estado)
                     <td>
                         <input type="number"
                             name="items[{{ $data['item_id'] }}][{{ $estado }}]"
@@ -91,7 +91,7 @@
                     <td class="text-success">{{ $itemData['devuelto'] }}</td>
                     <td class="text-danger font-weight-bold">{{ $itemData['pendiente'] }}</td>
 
-                    @foreach (['ok','danado','perdido','consumido'] as $estado)
+                    @foreach (['ok','dañado','perdido','consumido'] as $estado)
                     <td>
                         <input type="number"
                             name="kits[{{ $kitData['kit_id'] }}][{{ $itemData['item_id'] }}][{{ $estado }}]"

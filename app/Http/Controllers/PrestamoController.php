@@ -20,6 +20,14 @@ use Illuminate\Validation\Rule;
 
 class PrestamoController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(['permission:prestamos.view'])->only(['index', 'show', 'ImpresionHistorial']);
+        $this->middleware(['permission:prestamos.create'])->only(['create', 'store']);
+        $this->middleware(['permission:prestamos.update'])->only(['edit', 'update']);
+        $this->middleware(['permission:prestamos.delete'])->only(['destroy']);
+        $this->middleware(['permission:prestamos.imprimir'])->only(['ImpresionPrestamo']);
+    }
     /* ============================================================
        INDEX
        ============================================================ */

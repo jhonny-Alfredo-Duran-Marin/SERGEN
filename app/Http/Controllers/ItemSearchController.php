@@ -7,6 +7,10 @@ use Illuminate\Http\Request;
 
 class ItemSearchController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(['permission:items.view']);
+    }
     public function search(Request $request)
     {
         $q = trim((string)$request->query('q', ''));

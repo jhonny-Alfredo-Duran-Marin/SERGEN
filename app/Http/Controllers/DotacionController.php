@@ -17,10 +17,11 @@ class DotacionController extends Controller
 {
     public function __construct()
     {
-        $this->middleware(['permission:dotaciones.view'])->only(['index', 'show']);
+        $this->middleware(['permission:dotaciones.view'])->only(['index', 'show', 'imprimirRecibo']);
         $this->middleware(['permission:dotaciones.create'])->only(['create', 'store']);
         $this->middleware(['permission:dotaciones.update'])->only(['edit', 'update']);
         $this->middleware(['permission:dotaciones.delete'])->only(['destroy']);
+        $this->middleware(['permission:dotaciones.create'])->only(['formDevolver', 'procesarDevolucion']); // O usa un permiso de devolución si prefieres
     }
 
     /* ======================================================

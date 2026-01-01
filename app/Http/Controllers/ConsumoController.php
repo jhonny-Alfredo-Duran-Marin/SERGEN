@@ -11,6 +11,12 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class ConsumoController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(['permission:consumos.view'])->only(['index', 'show', 'imprimirRecibo']);
+        $this->middleware(['permission:consumos.pdf'])->only(['reportepdf']);
+    }
+
     public function index(Request $request)
     {
         $query = Consumo::with(['item', 'persona', 'proyecto', 'prestamo']);

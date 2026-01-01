@@ -105,7 +105,7 @@
                                                                id="perm-{{ $perm->id }}"
                                                                {{ in_array($perm->id, $selected) ? 'checked' : '' }}>
                                                         <label class="custom-control-label" for="perm-{{ $perm->id }}">
-                                                            <code class="text-sm">{{ $perm->name }}</code>
+                                                            <code class="text-sm">{{ \App\Support\PermissionLabel::label($perm->name) }}</code>
                                                         </label>
                                                     </div>
                                                 @endforeach
