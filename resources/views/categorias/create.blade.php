@@ -5,9 +5,11 @@
 @section('content_header')
     <div class="d-flex justify-content-between align-items-center">
         <h1 class="m-0"><i class="fas fa-plus-circle"></i> Crear Nueva Categoría</h1>
+        @can('categorias.view')
         <a href="{{ route('categorias.index') }}" class="btn btn-secondary">
             <i class="fas fa-arrow-left"></i> Volver
         </a>
+        @endcan
     </div>
 @stop
 
@@ -39,7 +41,9 @@
     </div>
 
     <div class="card-footer d-flex gap-2">
+        @can('categorias.create')
         <button class="btn btn-success"><i class="fas fa-save"></i> Guardar</button>
+        @endcan
         <a href="{{ route('categorias.index') }}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancelar</a>
     </div>
 </form>

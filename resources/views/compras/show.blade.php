@@ -13,10 +13,8 @@
             <x-adminlte-card title="Evidencia de Compra" theme="dark" icon="fas fa-image" outline collapsible>
                 @if ($compra->imagen)
                     <div class="text-center">
-                        <img src="{{ asset('storage/' . $compra->imagen) }}"
-                             class="img-fluid rounded shadow-sm border"
-                             style="max-height: 250px; cursor: pointer;"
-                             onclick="window.open(this.src)">
+                        <img src="{{ asset('storage/' . $compra->imagen) }}" class="img-fluid rounded shadow-sm border"
+                            style="max-height: 250px; cursor: pointer;" onclick="window.open(this.src)">
                     </div>
                 @else
                     <div class="text-center p-4 bg-light border">
@@ -29,10 +27,8 @@
             <x-adminlte-card title="Código QR de Pago" theme="purple" icon="fas fa-qrcode" outline collapsible>
                 @if ($compra->qr)
                     <div class="text-center">
-                        <img src="{{ asset('storage/' . $compra->qr) }}"
-                             class="img-fluid rounded shadow-sm border"
-                             style="max-height: 250px; cursor: pointer;"
-                             onclick="window.open(this.src)">
+                        <img src="{{ asset('storage/' . $compra->qr) }}" class="img-fluid rounded shadow-sm border"
+                            style="max-height: 250px; cursor: pointer;" onclick="window.open(this.src)">
                     </div>
                 @else
                     <div class="text-center p-4 bg-light border">
@@ -90,18 +86,23 @@
 
                 <div class="row mt-4">
                     <div class="col-12 border-top pt-3">
-                        <p class="text-muted small"><i class="fas fa-user"></i> Registrado por: {{ $compra->user->name ?? 'Sistema' }}</p>
+                        <p class="text-muted small"><i class="fas fa-user"></i> Registrado por:
+                            {{ $compra->user->name ?? 'Sistema' }}</p>
                     </div>
                 </div>
 
                 <x-slot name="footerSlot">
                     <div class="d-flex justify-content-between">
-                        <a href="{{ route('compras.index') }}" class="btn btn-secondary">
-                            <i class="fas fa-arrow-left"></i> Volver a la lista
-                        </a>
+                        @can('compras.index')
+                            <a href="{{ route('compras.index') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Volver a la lista
+                            </a>
+                        @endcan
+                           @can('compras.update')
                         <a href="{{ route('compras.edit', $compra) }}" class="btn btn-warning shadow">
                             <i class="fas fa-edit"></i> Editar información
                         </a>
+                        @endcan
                     </div>
                 </x-slot>
             </x-adminlte-card>

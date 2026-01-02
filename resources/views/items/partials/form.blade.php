@@ -142,13 +142,21 @@
 
             <div class="col-md-4">
                 <div class="form-group">
-                    <label for="ubicacion">
-                        <i class="fas fa-map-marker-alt"></i> Ubicación
+                    <label for="ubicacion_id">
+                        <i class="fas fa-map-marker-alt"></i> Ubicación Específica
+                        <span class="text-danger">*</span>
                     </label>
-                    <input type="text" name="ubicacion" id="ubicacion"
-                        class="form-control @error('ubicacion') is-invalid @enderror"
-                        value="{{ old('ubicacion', $item->ubicacion ?? '') }}" placeholder="Ej: Almacén A, Estante 3">
-                    @error('ubicacion')
+                    {{-- Cambiamos input por select --}}
+                    <select name="ubicacion_id" id="ubicacion_id"
+                        class="form-control @error('ubicacion_id') is-invalid @enderror" required>
+                        <option value="">— Seleccione Área primero —</option>
+                        {{-- Si estamos editando, cargamos la ubicación actual --}}
+                        @if (isset($item) && $item->ubicacion_id)
+                            <option value="{{ $item->ubicacion_id }}" selected>
+                                {{ $item->ubicacion_relacion->descripcion ?? 'Ubicación actual' }}</option>
+                        @endif
+                    </select>
+                    @error('ubicacion_id')
                         <span class="invalid-feedback">
                             <i class="fas fa-exclamation-triangle"></i> {{ $message }}
                         </span>
@@ -314,7 +322,7 @@
                         <option value="Observacion" @selected(old('estado', $item->estado ?? 'Observacion') === 'Observacion')>
                             Observacion
                         </option>
-                         <option value="Reservado" @selected(old('estado', $item->estado ?? 'Reservado') === 'Reservado')>
+                        <option value="Reservado" @selected(old('estado', $item->estado ?? 'Reservado') === 'Reservado')>
                             Reservado
                         </option>
                         <option value="Baja" @selected(old('estado', $item->estado ?? 'Baja') === 'Baja')>
@@ -465,6 +473,54 @@
                 }
             }).trigger('input');
 
+        });
+        $(function() {
+            // 1. Detectar cambio en el select de Area
+            $('#area_id').on('change', function() {
+                const areaId = $(this).val();
+                const $selectUbicacion = $('#ubicacion_id');
+
+                // Limpiar select de ubicaciones
+                $selectUbicacion.empty().append('<option value="">— Cargando ubicaciones... —</option>');
+
+                if (!areaId) {
+                    $selectUbicacion.empty().append(
+                    '<option value="">— Seleccione Área primero —</option>');
+                    return;
+                }
+
+                // 2. Petición AJAX a nuestra nueva ruta
+                $.ajax({
+                    url: `/api/areas/${areaId}/ubicaciones`,
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        $selectUbicacion.empty().append(
+                            '<option value="">— Seleccione ubicación —</option>');
+
+                        $.each(data, function(key, ubicacion) {
+                            $selectUbicacion.append(
+                                `<option value="${ubicacion.id}">${ubicacion.descripcion}</option>`
+                                );
+                        });
+
+                        // Si estamos en edición, esto intentará seleccionar la correcta si se recarga
+                        @if (isset($item))
+                            $selectUbicacion.val(
+                                "{{ old('ubicacion_id', $item->ubicacion_id) }}");
+                        @endif
+                    },
+                    error: function() {
+                        $selectUbicacion.empty().append(
+                            '<option value="">— Error al cargar —</option>');
+                    }
+                });
+            });
+
+            // Disparar el cambio al cargar la página si ya hay un área seleccionada (para Edit)
+            if ($('#area_id').val()) {
+                $('#area_id').trigger('change');
+            }
         });
     </script>
 @endpush

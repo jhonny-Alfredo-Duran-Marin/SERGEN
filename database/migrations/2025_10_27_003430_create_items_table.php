@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignId('categoria_id')->constrained('categorias')->cascadeOnUpdate()->restrictOnDelete();
             $table->foreignId('medida_id')->constrained('medidas')->cascadeOnUpdate()->restrictOnDelete();
             $table->foreignId('area_id')->constrained('areas')->cascadeOnUpdate()->restrictOnDelete();
-
+            $table->foreignId('ubicacion_id')->constrained('ubicacion')->cascadeOnUpdate()->restrictOnDelete();
             $table->string('codigo', 50)->unique();
             $table->string('descripcion', 255);
             $table->string('fabricante', 150)->nullable();
@@ -27,10 +27,8 @@ return new class extends Migration
 
             $table->decimal('costo_unitario', 12, 2)->default(0);
             $table->decimal('descuento', 12, 2)->default(0);
-            $table->enum('estado', ['Activo', 'Pasivo','Disponible','Prestado','Dotado','Observacion','Baja','En_Kit'])->default('Activo')->index();
+            $table->enum('estado', ['Activo', 'Pasivo', 'Disponible', 'Prestado', 'Dotado', 'Observacion', 'Baja', 'En_Kit'])->default('Activo')->index();
             $table->enum('tipo', ['Herramienta', 'Material', 'Dotacion'])->default('Material')->index();
-
-            $table->string('ubicacion', 250)->nullable();
             $table->timestamp('fecha_registro')->useCurrent();
             $table->string('imagen_path', 255)->nullable();
             $table->string('imagen_thumb', 255)->nullable();

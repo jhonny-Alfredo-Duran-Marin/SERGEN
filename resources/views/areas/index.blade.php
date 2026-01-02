@@ -20,9 +20,11 @@
             </div>
         </div>
 
+        @can('areas.create')
         <a href="{{ route('areas.create') }}" class="btn btn-success">
             <i class="fas fa-plus"></i> Nueva Area
         </a>
+        @endcan
     </div>
 @stop
 
@@ -81,7 +83,6 @@
                     {{-- INICIO FORELSE --}}
                     @forelse($areas as $c)
 
-                        {{-- CORRECCIÓN DE data-search --}}
                         <tr data-search="{{ Str::lower(Str::ascii(
                             ($c->descripcion ?? '') . ' ' .
                             ($c->estado ?? '') . ' ' .
@@ -105,13 +106,16 @@
                             <td class="text-center">
                                 <div class="btn-group" role="group">
 
+                                    @can('areas.update')
                                     <a class="btn btn-sm btn-warning"
                                        href="{{ route('areas.edit',$c) }}"
                                        data-toggle="tooltip"
                                        title="Editar">
-                                        <i class="fas fa-edit"></i>
+                                         <i class="fas fa-edit"></i>
                                     </a>
+                                    @endcan
 
+                                    @can('areas.delete')
                                     <form action="{{ route('areas.destroy',$c) }}"
                                           method="POST"
                                           class="d-inline"
@@ -125,6 +129,7 @@
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </form>
+                                    @endcan
 
                                 </div>
                             </td>
@@ -140,7 +145,6 @@
                     @endforelse
                     {{-- FIN FORELSE --}}
 
-                        {{-- Fila "sin resultados" del filtro --}}
                         <tr id="no-results" style="display:none;">
                             <td colspan="5" class="text-center py-5">
                                 <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
@@ -153,7 +157,6 @@
             </div>
         </div>
 
-        {{-- Paginación --}}
         @if(method_exists($areas,'hasPages') && $areas->hasPages())
             <div class="card-footer d-flex flex-column flex-md-row align-items-md-center justify-content-between">
                 <small class="text-muted mb-2 mb-md-0">
@@ -167,68 +170,4 @@
         @endif
 
     </div>
-@stop
-
-@section('js')
-<script>
-(function(){
-  const input = document.getElementById('search-areas');
-  const clear = document.getElementById('clear-search');
-  const table = document.getElementById('tabla-categorias');
-  if(!table) return;
-
-  const allRows = Array.from(table.querySelectorAll('tbody tr'))
-        .filter(tr => tr.id !== 'no-results');
-
-  const noRes  = document.getElementById('no-results');
-  const badge  = document.getElementById('badge-total');
-  const count  = document.getElementById('count-areas');
-
-  const norm = s => (s||'').toString()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g,'')
-        .toLowerCase();
-
-  let t;
-  const debounce = (fn,ms=250)=>(...a)=>{
-      clearTimeout(t);
-      t=setTimeout(()=>fn(...a),ms);
-  };
-
-  const applyFilter = ()=>{
-    const q = norm(input.value);
-    let visible = 0;
-
-    allRows.forEach(tr => {
-      const haystack = tr.dataset.search || '';
-      const show = q === '' || haystack.includes(q);
-
-      tr.style.display = show ? '' : 'none';
-
-      if(show){
-        visible++;
-        const firstCell = tr.querySelector('td');
-        if(firstCell) firstCell.textContent = visible;
-      }
-    });
-
-    noRes.style.display = visible === 0 ? '' : 'none';
-
-    if(badge) badge.textContent = `${visible} registro${visible===1?'':'s'}`;
-    if(count) count.textContent  = visible;
-  };
-
-  input?.addEventListener('input', debounce(applyFilter,250));
-
-  clear?.addEventListener('click', e=>{
-    e.preventDefault();
-    input.value = '';
-    applyFilter();
-    input.focus();
-  });
-
-  $(function(){ $('[data-toggle="tooltip"]').tooltip(); });
-
-})();
-</script>
 @stop

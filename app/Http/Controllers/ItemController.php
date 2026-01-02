@@ -16,6 +16,7 @@ use Intervention\Image\Drivers\Gd\Driver;
 use App\Jobs\ProcessItemImages;
 use App\Models\Area;
 use App\Models\Movimiento;
+use App\Models\Ubicacion;
 
 class ItemController extends Controller
 {
@@ -35,7 +36,7 @@ class ItemController extends Controller
         $tipo        = $request->string('tipo')->toString();
         $estado      = $request->string('estado')->toString();
 
-        $query = Item::query()->with(['area:id,descripcion', 'categoria:id,descripcion', 'medida:id,simbolo']);
+        $query = Item::query()->with(['area:id,descripcion', 'categoria:id,descripcion', 'medida:id,simbolo', 'ubicacion_relacion:id,descripcion']);
 
         if ($q !== '') {
             $query->where(function ($qq) use ($q) {
@@ -124,7 +125,7 @@ class ItemController extends Controller
             'costo_unitario' => ['required', 'numeric', 'min:0', 'max:99999999999.99'],
             'estado'         => ['required', Rule::in(['Activo', 'Pasivo', 'Disponible', 'Prestado', 'Dotado', 'Observacion', 'Baja', 'Reservado'])],
             'tipo'           => ['required', Rule::in(['Herramienta', 'Material'])],
-            'ubicacion'      => ['nullable', 'string', 'max:150'],
+            'ubicacion_id' => ['required', 'exists:ubicacion,id'],
             'fecha_registro' => ['nullable', 'date'],
             'imagen'         => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5048'],
         ]);
@@ -166,10 +167,16 @@ class ItemController extends Controller
 
     public function show(Item $item)
     {
-        $item->load(['categoria:id,descripcion', 'medida:id,descripcion,simbolo', 'area:id,descripcion']);
+        // Cargamos 'area.sucursal' para mostrar la ruta completa en el detalle
+        $item->load([
+            'categoria:id,descripcion',
+            'medida:id,descripcion,simbolo',
+            'area.sucursal', // <--- Añadimos .sucursal
+            'ubicacion_relacion'
+        ]);
+
         return view('items.show', compact('item'));
     }
-
     public function edit(Item $item)
     {
         $categorias = Categoria::orderBy('descripcion')->get(['id', 'descripcion']);
@@ -193,13 +200,13 @@ class ItemController extends Controller
             'descuento'      => ['required', 'numeric', 'min:0', 'max:99999999999.99'],
             'estado'         => ['required', Rule::in(['Activo', 'Pasivo', 'Disponible', 'Prestado', 'Dotado', 'Observacion', 'Baja', 'Reservado'])],
             'tipo'           => ['required', Rule::in(['Herramienta', 'Material'])],
-            'ubicacion'      => ['nullable', 'string', 'max:150'],
+            'ubicacion_id' => ['required', 'exists:ubicacion,id'],
             'fecha_registro' => ['nullable', 'date'],
             'imagen'         => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5048'],
             'remove_imagen'  => ['nullable', 'boolean'],
         ]);
         $copia = $item->replicate();
- 
+
         $oldOriginal = $item->imagen_path;
         $oldThumb    = $item->imagen_thumb;
 
@@ -282,16 +289,25 @@ class ItemController extends Controller
         if ($item->wasChanged('ubicacion')) {
             $item->registrarMovimiento("Modificacion", "CAMBIO_UBICACION", $item->cantidad, "Nueva ubicación: {$item->ubicacion}");
         }
-         if ($item->wasChanged('area_id')) {
+        if ($item->wasChanged('area_id')) {
             $item->registrarMovimiento("Modificacion", "CAMBIO_AREA", $item->cantidad,  "Nueva área: {$item->area->descripcion}");
         }
-          if ($item->wasChanged('categoria_id')) {
+        if ($item->wasChanged('categoria_id')) {
             $item->registrarMovimiento("Modificacion", "CAMBIO_CATEGORIA", $item->cantidad,  "Nueva categoría: {$item->categoria->descripcion}");
         }
-           if ($item->wasChanged('medida_id')) {
+        if ($item->wasChanged('medida_id')) {
             $item->registrarMovimiento("Modificacion", "CAMBIO_MEDIDA", $item->cantidad, "Nueva medida: {$item->medida->descripcion}");
         }
-
+        if ($item->wasChanged('ubicacion_id')) {
+            // Cargamos la relación para obtener la descripción
+            $item->load('ubicacion_relacion');
+            $item->registrarMovimiento(
+                "Modificacion",
+                "CAMBIO_UBICACION",
+                $item->cantidad,
+                "Nueva ubicación: " . ($item->ubicacion_relacion->descripcion ?? 'N/A')
+            );
+        }
         return redirect()->route('items.index')->with('status', 'Item actualizado.');
     }
 
@@ -325,5 +341,15 @@ class ItemController extends Controller
         return redirect()
             ->route('items.index')
             ->with('status', 'Item eliminado.');
+    }
+
+    public function getUbicacionesPorArea($areaId)
+    {
+        // Buscamos las ubicaciones que pertenecen al área y están activas
+        $ubicaciones = Ubicacion::where('area_id', $areaId)
+            ->where('estado', 'Activo')
+            ->get(['id', 'descripcion']);
+
+        return response()->json($ubicaciones);
     }
 }

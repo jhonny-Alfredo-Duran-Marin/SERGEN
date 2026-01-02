@@ -24,7 +24,7 @@ class Item extends Model
         'estado',
         'tipo',
         'descuento',
-        'ubicacion',
+        'ubicacion_id',
         'fecha_registro',
         'imagen_path',
         'imagen_thumb',
@@ -111,6 +111,9 @@ class Item extends Model
             'user_id'   => auth()->id(),
             'nota'      => $nota
         ]);
-
+    }
+    public function ubicacion_relacion()
+    {
+        return $this->belongsTo(Ubicacion::class, 'ubicacion_id');
     }
 }

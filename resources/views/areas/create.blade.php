@@ -5,9 +5,11 @@
 @section('content_header')
     <div class="d-flex justify-content-between align-items-center">
         <h1 class="m-0"><i class="fas fa-plus-circle"></i> Crear Nueva Area</h1>
+        @can('areas.view')
         <a href="{{ route('areas.index') }}" class="btn btn-secondary">
             <i class="fas fa-arrow-left"></i> Volver
         </a>
+        @endcan
     </div>
 @stop
 
@@ -30,6 +32,7 @@
             {{-- AÑADIR CAMPO SUCURSAL --}}
             <div class="col-md-5 mb-3">
                 <label class="form-label"><i class="fas fa-store"></i> Sucursal <span class="text-danger">*</span></label>
+                @can('sucursal.view')
                 <select name="sucursal_id" class="form-control" required>
                     <option value="">-- Seleccione Sucursal --</option>
                     @foreach($sucursales as $sucursal)
@@ -38,6 +41,9 @@
                         </option>
                     @endforeach
                 </select>
+                @else
+                <input class="form-control" readonly value="No tienes permiso para ver sucursales">
+                @endcan
                 @error('sucursal_id') <small class="text-danger">{{ $message }}</small> @enderror
             </div>
             {{-- FIN CAMPO SUCURSAL --}}
@@ -54,7 +60,9 @@
     </div>
 
     <div class="card-footer d-flex gap-2">
+        @can('areas.create')
         <button class="btn btn-success"><i class="fas fa-save"></i> Guardar</button>
+        @endcan
         <a href="{{ route('areas.index') }}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancelar</a>
     </div>
 </form>

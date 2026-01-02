@@ -151,11 +151,12 @@
                             <td>{{ $compra->user->name ?? '—' }}</td>
                             <td class="text-nowrap">
                                 {{-- 1. Botón Ver (Fuera del modal para acceso directo) --}}
-                                <a href="{{ route('compras.show', $compra) }}" class="btn btn-xs btn-info"
-                                    title="Ver Detalle">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-
+                                @can('compras.show')
+                                    <a href="{{ route('compras.show', $compra) }}" class="btn btn-xs btn-info"
+                                        title="Ver Detalle">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                @endcan
                                 {{-- 2. Botón Editar --}}
                                 @can('compras.update')
                                     <a href="{{ route('compras.edit', $compra) }}" class="btn btn-xs btn-warning"
