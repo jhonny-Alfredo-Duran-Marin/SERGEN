@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('dotacions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('persona_id')->constrained('personas')->cascadeOnDelete();
-            $table->date('fecha');
+            $table->datetime('fecha');
             $table->text('nota')->nullable();
             $table->enum('estado_final', [
                 'ABIERTA',

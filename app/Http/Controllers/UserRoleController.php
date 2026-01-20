@@ -8,6 +8,11 @@ use Spatie\Permission\Models\Role;
 
 class UserRoleController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(['permission:users.view'])->only(['index']);
+        $this->middleware(['permission:users.assign.roles'])->only(['edit', 'update']);
+    }
     public function index()
     {
         $users = User::with('roles')->orderBy('name')->paginate(20);
@@ -18,10 +23,10 @@ class UserRoleController extends Controller
     {
         $roles = Role::orderBy('name')->get();
         $selected = $user->roles()->pluck('id')->toArray();
-        return view('usuarios.user.edit', compact('user','roles','selected'));
+        return view('usuarios.user.edit', compact('user', 'roles', 'selected'));
     }
 
-     public function update(Request $request, User $user)
+    public function update(Request $request, User $user)
     {
         $data = $request->validate([
             'roles' => ['array'],
@@ -37,6 +42,6 @@ class UserRoleController extends Controller
 
         app('cache')->forget('spatie.permission.cache');
 
-        return redirect()->route('users.index')->with('status','Roles actualizados para el usuario');
+        return redirect()->route('users.index')->with('status', 'Roles actualizados para el usuario');
     }
 }

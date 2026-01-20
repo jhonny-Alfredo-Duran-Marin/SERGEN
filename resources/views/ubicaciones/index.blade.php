@@ -7,62 +7,109 @@
 @stop
 
 @section('content')
+    {{-- Mensajes de sesión --}}
+    @if(session('success'))
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="icon fas fa-check"></i> {{ session('success') }}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="icon fas fa-ban"></i> {{ session('error') }}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    @endif
+
     <div class="card">
         <div class="card-header">
-            {{-- Solo muestra el botón si tiene permiso de crear --}}
-            @can('areas.create')
-                <a href="{{ route('ubicaciones.create') }}" class="btn btn-primary">Nueva Ubicación</a>
+            @can('ubicaciones.create')
+                <a href="{{ route('ubicaciones.create') }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Nueva Ubicación
+                </a>
             @endcan
         </div>
         <div class="card-body">
-            <table class="table table-bordered table-striped">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Descripción</th>
-                        <th>Área</th>
-                        <th>Estado</th>
-                        @if (auth()->user()->can('areas.update') || auth()->user()->can('areas.delete'))
-                            <th>Acciones</th>
-                        @endif
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($ubicaciones as $ubicacion)
+            @if($ubicaciones->isEmpty())
+                <div class="alert alert-info">
+                    <i class="icon fas fa-info"></i> No hay ubicaciones registradas.
+                </div>
+            @else
+                <table id="ubicacionesTable" class="table table-bordered table-striped table-hover">
+                    <thead>
                         <tr>
-                            <td>{{ $ubicacion->id }}</td>
-                            <td>{{ $ubicacion->descripcion }}</td>
-                            <td>{{ $ubicacion->area->descripcion }} - {{ $ubicacion->area->sucursal->descripcion }}</td>
-                            <td>
-                                <span class="badge {{ $ubicacion->estado == 'Activo' ? 'badge-success' : 'badge-danger' }}">
-                                    {{ $ubicacion->estado }}
-                                </span>
-                            </td>
-                            @if (auth()->user()->can('areas.update') || auth()->user()->can('areas.delete'))
-                                <td>
-                                    @can('areas.update')
-                                        <a href="{{ route('ubicaciones.edit', $ubicacion) }}" class="btn btn-sm btn-info">
-                                            <i class="fas fa-edit"></i> Editar
-                                        </a>
-                                    @endcan
-
-                                    @can('areas.delete')
-                                        <form action="{{ route('ubicaciones.destroy', $ubicacion) }}" method="POST"
-                                            style="display:inline;">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-danger"
-                                                onclick="return confirm('¿Está seguro de eliminar esta ubicación?')">
-                                                <i class="fas fa-trash"></i> Borrar
-                                            </button>
-                                        </form>
-                                    @endcan
-                                </td>
+                            <th style="width: 60px;">ID</th>
+                            <th>Descripción</th>
+                            <th>Área</th>
+                            <th>Sucursal</th>
+                            <th style="width: 100px;">Estado</th>
+                            @if (auth()->user()->can('ubicaciones.update') || auth()->user()->can('ubicaciones.delete'))
+                                <th style="width: 150px;">Acciones</th>
                             @endif
                         </tr>
-                    @endforeach
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        @foreach ($ubicaciones as $ubicacion)
+                            <tr>
+                                <td>{{ $ubicacion->id }}</td>
+                                <td>{{ $ubicacion->descripcion }}</td>
+                                <td>{{ $ubicacion->area->descripcion }}</td>
+                                <td>{{ $ubicacion->area->sucursal->descripcion }}</td>
+                                <td class="text-center">
+                                    <span class="badge {{ $ubicacion->estado == 'Activo' ? 'badge-success' : 'badge-secondary' }}">
+                                        {{ $ubicacion->estado }}
+                                    </span>
+                                </td>
+                                @if (auth()->user()->can('ubicaciones.update') || auth()->user()->can('ubicaciones.delete'))
+                                    <td class="text-center">
+                                        @can('ubicaciones.update')
+                                            <a href="{{ route('ubicaciones.edit', $ubicacion) }}"
+                                               class="btn btn-sm btn-info"
+                                               title="Editar">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                        @endcan
+
+                                        @can('ubicaciones.delete')
+                                            <form action="{{ route('ubicaciones.destroy', $ubicacion) }}"
+                                                  method="POST"
+                                                  style="display:inline;"
+                                                  onsubmit="return confirm('¿Está seguro de eliminar la ubicación: {{ $ubicacion->descripcion }}?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit"
+                                                        class="btn btn-sm btn-danger"
+                                                        title="Eliminar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        @endcan
+                                    </td>
+                                @endif
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endif
         </div>
     </div>
+@stop
+
+@section('js')
+    <script>
+        $(document).ready(function() {
+            $('#ubicacionesTable').DataTable({
+                responsive: true,
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json'
+                },
+                order: [[1, 'asc']]
+            });
+        });
+    </script>
 @stop

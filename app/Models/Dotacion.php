@@ -16,7 +16,7 @@ class Dotacion extends Model
     // app/Models/Dotacion.php
 
     protected $casts = [
-        'fecha' => 'date', // O 'datetime' si incluye hora
+        'fecha' => 'datetime:Y-m-d H:i:s',
     ];
 
     public function persona()

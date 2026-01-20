@@ -398,6 +398,13 @@ return [
                     'can' => 'areas.view',
                 ],
                 [
+                    'text' => 'Ubicaciones',
+                    'route' => 'ubicaciones.index',
+                    'icon' => 'fas fa-th-list',
+                    'can' => 'ubicaciones.view',
+                ],
+
+                [
                     'text' => 'Categorías',
                     'route' => 'categorias.index',
                     'icon' => 'fas fa-tags',
@@ -499,7 +506,7 @@ return [
         ],
 
         // ===== CUENTA =====
-       /* [
+        /* [
             'header' => 'Ajustes de Cuenta',
         ],
         [

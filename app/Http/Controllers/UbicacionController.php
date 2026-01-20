@@ -11,7 +11,7 @@ class UbicacionController extends Controller
 {
     public function __construct()
     {
-        // Middleware de permisos (Spatie)
+        // Middleware de permisos - CORREGIDO: usar 'ubicaciones' en lugar de 'areas'
         $this->middleware(['permission:ubicaciones.view'])->only(['index', 'show']);
         $this->middleware(['permission:ubicaciones.create'])->only(['create', 'store']);
         $this->middleware(['permission:ubicaciones.update'])->only(['edit', 'update']);
@@ -23,17 +23,23 @@ class UbicacionController extends Controller
      */
     public function index()
     {
-        // Cargamos área y la sucursal del área de una vez
-        $ubicaciones = Ubicacion::with('area.sucursal')->get();
+        $ubicaciones = Ubicacion::with('area.sucursal')
+            ->orderBy('descripcion')
+            ->get();
+
         return view('ubicaciones.index', compact('ubicaciones'));
     }
+
     /**
      * Muestra el formulario para crear una nueva ubicación.
      */
     public function create()
     {
-        // Necesitamos las áreas para el select del formulario
-        $areas = Area::all();
+        $areas = Area::with('sucursal')
+            ->where('estado', 'Activo')
+            ->orderBy('descripcion')
+            ->get();
+
         return view('ubicaciones.create', compact('areas'));
     }
 
@@ -42,13 +48,18 @@ class UbicacionController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'descripcion' => 'required|string|max:150|unique:ubicacion,descripcion',
             'estado'      => 'required|in:Activo,Pasivo',
             'area_id'     => 'required|exists:areas,id',
+        ], [
+            'descripcion.required' => 'La descripción es obligatoria.',
+            'descripcion.unique'   => 'Ya existe una ubicación con esta descripción.',
+            'area_id.required'     => 'Debe seleccionar un área.',
+            'area_id.exists'       => 'El área seleccionada no es válida.',
         ]);
 
-        Ubicacion::create($request->all());
+        Ubicacion::create($validated);
 
         return redirect()->route('ubicaciones.index')
             ->with('success', 'Ubicación creada correctamente.');
@@ -59,6 +70,7 @@ class UbicacionController extends Controller
      */
     public function show(Ubicacion $ubicacion)
     {
+        $ubicacion->load('area.sucursal');
         return view('ubicaciones.show', compact('ubicacion'));
     }
 
@@ -67,17 +79,20 @@ class UbicacionController extends Controller
      */
     public function edit(Ubicacion $ubicacion)
     {
-        $areas = Area::all();
+        $areas = Area::with('sucursal')
+            ->where('estado', 'Activo')
+            ->orderBy('descripcion')
+            ->get();
+
         return view('ubicaciones.edit', compact('ubicacion', 'areas'));
     }
 
     /**
      * Actualiza la ubicación en la base de datos.
      */
-    // El nombre debe ser $ubicacion porque así lo definió Laravel en la ruta
     public function update(Request $request, Ubicacion $ubicacion)
     {
-        $request->validate([
+        $validated = $request->validate([
             'descripcion' => [
                 'required',
                 'string',
@@ -86,9 +101,14 @@ class UbicacionController extends Controller
             ],
             'estado'  => 'required|in:Activo,Pasivo',
             'area_id' => 'required|exists:areas,id',
+        ], [
+            'descripcion.required' => 'La descripción es obligatoria.',
+            'descripcion.unique'   => 'Ya existe una ubicación con esta descripción.',
+            'area_id.required'     => 'Debe seleccionar un área.',
+            'area_id.exists'       => 'El área seleccionada no es válida.',
         ]);
 
-        $ubicacion->update($request->all());
+        $ubicacion->update($validated);
 
         return redirect()->route('ubicaciones.index')
             ->with('success', 'Ubicación actualizada correctamente.');
@@ -99,9 +119,14 @@ class UbicacionController extends Controller
      */
     public function destroy(Ubicacion $ubicacion)
     {
-        $ubicacion->delete();
+        try {
+            $ubicacion->delete();
 
-        return redirect()->route('ubicaciones.index')
-            ->with('success', 'Ubicación eliminada correctamente.');
+            return redirect()->route('ubicaciones.index')
+                ->with('success', 'Ubicación eliminada correctamente.');
+        } catch (\Exception $e) {
+            return redirect()->route('ubicaciones.index')
+                ->with('error', 'No se pudo eliminar la ubicación. Puede estar en uso.');
+        }
     }
 }
